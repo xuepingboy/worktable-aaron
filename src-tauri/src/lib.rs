@@ -139,7 +139,7 @@ fn set_widget_passthrough(enabled: bool, app: tauri::AppHandle) -> Result<(), St
 #[cfg(target_os = "windows")]
 #[tauri::command]
 fn set_widget_stick(stick: bool, app: tauri::AppHandle) -> Result<(), String> {
-    use tauri::window::WindowExtWindows;
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         SetWindowPos, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
@@ -147,10 +147,12 @@ fn set_widget_stick(stick: bool, app: tauri::AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("widget") {
         let _ = w.set_always_on_top(!stick);
         if stick {
+            let Ok(handle) = w.window_handle() else { return Ok(()); };
+            let RawWindowHandle::Win32(h) = handle.as_raw() else { return Ok(()); };
             const HWND_BOTTOM: HWND = 1 as HWND;
             unsafe {
                 SetWindowPos(
-                    w.hwnd(),
+                    h.hwnd.get() as *mut core::ffi::c_void,
                     HWND_BOTTOM,
                     0,
                     0,
@@ -184,8 +186,10 @@ fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
 /// 开始拖拽调整挂件窗口大小（右下角手柄；无边框窗口无系统 resize 边缘，需手动调用）
 #[tauri::command]
 fn start_widget_resize(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(w) = app.get_webview_window("widget") {
-        w.start_resize_dragging(tauri::ResizeDirection::SouthEast)
+    use tauri_runtime::ResizeDirection;
+    // start_resize_dragging 仅在 tauri::window::Window 上提供（WebviewWindow 无此方法）
+    if let Some(w) = app.get_window("widget") {
+        w.start_resize_dragging(ResizeDirection::SouthEast)
             .map_err(|e| e.to_string())?;
     }
     Ok(())

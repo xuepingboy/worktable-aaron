@@ -41,4 +41,15 @@ jobs:
         run: pnpm tauri icon assets/icons/工作计划管理工作台.png
 
       - name: Rust：编译检查
-        run: cd src-tauri && cargo check
+        run: |
+          cd src-tauri
+          cargo check --message-format=short 2>&1 | tee /tmp/cargo-check.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            # 失败时把错误写进 job summary，便于在 Actions 页面直接查看（无需下载日志）
+            echo "### cargo check 失败" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -E "error(\[|:)|warning|-->" /tmp/cargo-check.log | head -80 >> "$GITHUB_STEP_SUMMARY" || tail -80 /tmp/cargo-check.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit "$status"
+          fi

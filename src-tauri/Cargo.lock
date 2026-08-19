@@ -2689,6 +2689,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 name = "planner"
 version = "1.0.0"
 dependencies = [
+ "raw-window-handle",
  "serde",
  "serde_json",
  "tauri",
@@ -2698,6 +2699,8 @@ dependencies = [
  "tauri-plugin-notification",
  "tauri-plugin-opener",
  "tauri-plugin-updater",
+ "tauri-runtime",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
