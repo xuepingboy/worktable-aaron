@@ -96,7 +96,7 @@
 - [x] **P2 原生能力（2026-08-19）**：提醒引擎 Tauri 下走原生通知；MoreMenu 桌面端区（开机自启开关 + 检查更新）；托盘/关闭到托盘在 Rust 侧；自动更新为可选特性（需生成签名密钥，见 DESKTOP.md）
 - [x] **桌面月历挂件骨架（2026-08-19）**：Tauri 第二个透明置顶窗口（/widget 路由）+ 紧凑月历（任务圆点/今日高亮/翻月/拖拽条）+ 托盘与 MoreMenu 显隐入口 + storage 事件实时同步；参考 BUG-gao/floating-todo。P2 待续：穿透/贴桌面/透明度/位置记忆
 - [x] **挂件增强（2026-08-19，已推送：v1.1.0 含，CI 全绿）**：任务名优先级底色（PRIORITY_BG 同月视图）；设置面板（字体大小/透明度/底色色板/农历开关/节假日开关/贴桌面）；农历+节气+节假日+调休（lunar-typescript，2026 数据齐全）；Rust：贴桌面（SetWindowPos HWND_BOTTOM）+ 位置记忆（widget-pos.txt 节流写盘）；测试 75→82。Rust 编译修复链：557a893（ResizeDirection/raw-window-handle）、6124780（CI shell:bash）、112e25c（unstable feature 开 get_window）、9b3f417（version→1.1.0）
-- [ ] **桌面版首版落地（v1.1.0 出包中）**：代码全推（main@5bf1b61）。**release.yml 已二次重构（5bf1b61，已生效）**：彻底弃用 tauri-action 的发布逻辑。原因：①首轮 run 32216771466 双平台 build success 但 release 被 409 竞态漏建；②二轮机传 `releaseId` 给 tauri-action 反而双平台 build 全失败（tauri-action 的 releaseId/`v__VERSION__` 解析在并行下行为不确定）。最终方案：`create-release` job 用 softprops 预建 draft → `build` job 直接 `pnpm tauri build` → 再用 `softprops/action-gh-release@v2` 的 `files:` 把 `src-tauri/target/release/bundle/**/*.{exe,dmg,msi}` 上传到已建 draft（两 job 各自追加，无竞态）。重推 tag 触发新 run 32218247672（后台轮询中）。本机缺 MSVC 全部走 Actions 云端；updater 可选特性未启用（无需签名密钥）。
+- [ ] **桌面版首版落地（v1.1.0 出包中）**：代码全推（main@b226d95，tag v1.1.0 已重指向 b226d95）。**release.yml 已最终重构（5bf1b61→b226d95 继承）**：`create-release` 单平台预建 draft → 双平台 `pnpm tauri build` → `softprops/action-gh-release@v2` 按 tag 追加资产（`src-tauri/target/release/bundle/nsis/*.exe`、`dmg/*.dmg`、`msi/*.msi`），彻底绕开 tauri-action。v1.1.0 新 run 已触发（含 widget 透明/边框修复）。本机缺 MSVC 全部走 Actions 云端；updater 可选特性未启用（无需签名密钥）。
 - [ ] **P2** 番茄钟（用户曾提及但本轮确认暂不做，后续可评估）
 
 ## 6. 已知问题与坑（重要！）
