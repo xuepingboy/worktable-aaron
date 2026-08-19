@@ -15,7 +15,7 @@ import { usePlannerStore } from "@/store/plannerStore";
 import { parseJsonBackup } from "@/lib/export";
 import { clearAllStorage } from "@/lib/storage";
 import { ExportDialog } from "./ExportDialog";
-import { isTauri, autostartEnabled, setAutostart, checkForUpdate } from "@/lib/tauri";
+import { isTauri, autostartEnabled, setAutostart, checkForUpdate, toggleWidget } from "@/lib/tauri";
 
 export function MoreMenu() {
   const importData = usePlannerStore((s) => s.importData);
@@ -54,6 +54,11 @@ export function MoreMenu() {
     } finally {
       setCheckingUpdate(false);
     }
+  };
+
+  const handleToggleWidget = async () => {
+    const err = await toggleWidget();
+    if (err) toast.error(err);
   };
 
   const handleImport = (file: File) => {
@@ -103,6 +108,7 @@ export function MoreMenu() {
             <>
               <DropdownMenuSeparator />
               <DropdownMenuLabel>桌面端</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => void handleToggleWidget()}>显示/隐藏桌面挂件</DropdownMenuItem>
               <DropdownMenuItem onClick={() => void toggleAutostart()}>
                 开机自启：{autostart ? "开" : "关"}
               </DropdownMenuItem>

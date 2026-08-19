@@ -68,3 +68,35 @@ export async function autostartEnabled(): Promise<boolean> {
 export async function checkForUpdate(): Promise<string> {
   return invoke<string>("check_for_update");
 }
+
+// ── 桌面挂件（P0 骨架）───────────────────────────────────────
+
+/** 显示/隐藏桌面月历挂件 */
+export async function toggleWidget(): Promise<string | null> {
+  try {
+    await invoke("toggle_widget");
+    return null;
+  } catch (e) {
+    return typeof e === "string" ? e : "切换挂件失败";
+  }
+}
+
+/** 切换挂件鼠标穿透（true=点击穿透到桌面） */
+export async function setWidgetPassthrough(enabled: boolean): Promise<string | null> {
+  try {
+    await invoke("set_widget_passthrough", { enabled });
+    return null;
+  } catch (e) {
+    return typeof e === "string" ? e : "切换穿透失败";
+  }
+}
+
+/** 从挂件唤起主窗口 */
+export async function showMainWindow(): Promise<string | null> {
+  try {
+    await invoke("show_main_window");
+    return null;
+  } catch (e) {
+    return typeof e === "string" ? e : "打开主窗口失败";
+  }
+}

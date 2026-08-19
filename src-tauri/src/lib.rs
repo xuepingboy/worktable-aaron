@@ -77,6 +77,47 @@ fn autostart_enabled(app: tauri::AppHandle) -> bool {
     app.autolaunch().is_enabled().unwrap_or(false)
 }
 
+// ── 桌面挂件（第二个透明置顶窗口）────────────────────────────
+
+/// 显示/隐藏桌面月历挂件；显示时定位到当前显示器右上角
+#[tauri::command]
+fn toggle_widget(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("widget") {
+        if w.is_visible().unwrap_or(false) {
+            w.hide().map_err(|e| e.to_string())?;
+        } else {
+            if let Ok(Some(mon)) = w.current_monitor() {
+                let size = w.outer_size().unwrap_or_default();
+                let msize = mon.size();
+                let x = (msize.width as i32 - size.width as i32 - 24).max(0);
+                let _ = w.set_position(tauri::PhysicalPosition::new(x, 48));
+            }
+            let _ = w.show();
+            let _ = w.set_always_on_top(true);
+        }
+    }
+    Ok(())
+}
+
+/// 切换挂件鼠标穿透（true = 点击穿透到桌面，挂件不可交互）
+#[tauri::command]
+fn set_widget_passthrough(enabled: bool, app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("widget") {
+        w.set_ignore_cursor_events(enabled).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// 从挂件唤起主窗口
+#[tauri::command]
+fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("main") {
+        w.show().map_err(|e| e.to_string())?;
+        w.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // ── 应用信息 / 自动更新（P2，更新需 updater 特性）────────────
 
 #[tauri::command]
@@ -117,8 +158,9 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 
     let show_item = MenuItem::with_id(app, "show", "打开主界面", true, None::<&str>)?;
+    let widget_item = MenuItem::with_id(app, "widget", "显示/隐藏桌面挂件", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+    let menu = Menu::with_items(app, &[&show_item, &widget_item, &quit_item])?;
 
     let icon = app
         .default_window_icon()
@@ -136,6 +178,9 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                     let _ = w.show();
                     let _ = w.set_focus();
                 }
+            }
+            "widget" => {
+                let _ = toggle_widget(app.clone());
             }
             "quit" => app.exit(0),
             _ => {}
@@ -176,6 +221,9 @@ pub fn run() {
             autostart_enabled,
             app_version,
             check_for_update,
+            toggle_widget,
+            set_widget_passthrough,
+            show_main_window,
         ])
         .setup(|app| {
             #[cfg(desktop)]

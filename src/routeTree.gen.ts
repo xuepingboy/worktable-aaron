@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LayoutRouteImport } from './routes/_layout'
+import { Route as WidgetRouteImport } from './routes/widget'
 import { Route as LayoutIndexRouteImport } from './routes/_layout.index'
 import { Route as LayoutMonthRouteImport } from './routes/_layout.month'
 import { Route as LayoutTasksRouteImport } from './routes/_layout.tasks'
@@ -18,6 +19,11 @@ import { Route as LayoutWeekRouteImport } from './routes/_layout.week'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WidgetRoute = WidgetRouteImport.update({
+  id: '/widget',
+  path: '/widget',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LayoutIndexRoute = LayoutIndexRouteImport.update({
@@ -48,12 +54,14 @@ const LayoutWeekRoute = LayoutWeekRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
+  '/widget': typeof WidgetRoute
   '/month': typeof LayoutMonthRoute
   '/tasks': typeof LayoutTasksRoute
   '/today': typeof LayoutTodayRoute
   '/week': typeof LayoutWeekRoute
 }
 export interface FileRoutesByTo {
+  '/widget': typeof WidgetRoute
   '/month': typeof LayoutMonthRoute
   '/tasks': typeof LayoutTasksRoute
   '/today': typeof LayoutTodayRoute
@@ -63,6 +71,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
+  '/widget': typeof WidgetRoute
   '/_layout/month': typeof LayoutMonthRoute
   '/_layout/tasks': typeof LayoutTasksRoute
   '/_layout/today': typeof LayoutTodayRoute
@@ -71,12 +80,13 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/month' | '/tasks' | '/today' | '/week'
+  fullPaths: '/' | '/widget' | '/month' | '/tasks' | '/today' | '/week'
   fileRoutesByTo: FileRoutesByTo
-  to: '/month' | '/tasks' | '/today' | '/week' | '/'
+  to: '/widget' | '/month' | '/tasks' | '/today' | '/week' | '/'
   id:
     | '__root__'
     | '/_layout'
+    | '/widget'
     | '/_layout/month'
     | '/_layout/tasks'
     | '/_layout/today'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   LayoutRoute: typeof LayoutRouteWithChildren
+  WidgetRoute: typeof WidgetRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -95,6 +106,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof LayoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/widget': {
+      id: '/widget'
+      path: '/widget'
+      fullPath: '/widget'
+      preLoaderRoute: typeof WidgetRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_layout/': {
@@ -156,6 +174,7 @@ const LayoutRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   LayoutRoute: LayoutRouteWithChildren,
+  WidgetRoute: WidgetRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

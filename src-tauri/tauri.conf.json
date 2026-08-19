@@ -21,6 +21,21 @@
         "center": true,
         "resizable": true,
         "fullscreen": false
+      },
+      {
+        "label": "widget",
+        "title": "工作计划挂件",
+        "url": "/widget",
+        "width": 340,
+        "height": 400,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "visible": false,
+        "focus": false
       }
     ],
     "security": {
