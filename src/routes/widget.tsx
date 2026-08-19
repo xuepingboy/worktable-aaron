@@ -40,6 +40,7 @@ interface WidgetSettings {
   showLunar: boolean; // 显示农历/节气/节日小字
   showHoliday: boolean; // 显示法定节假日与调休（依赖 showLunar 开启才有空间）
   stick: boolean; // 贴桌面（Windows）
+  frame: boolean; // 显示前端卡片边框+阴影
 }
 
 const DEFAULT_SETTINGS: WidgetSettings = {
@@ -49,6 +50,7 @@ const DEFAULT_SETTINGS: WidgetSettings = {
   showLunar: true,
   showHoliday: true,
   stick: false,
+  frame: false,
 };
 
 const BG_PRESETS: { key: string; label: string; color: string }[] = [
@@ -94,10 +96,10 @@ function WidgetCalendar() {
   const gridRef = useRef<HTMLDivElement>(null);
   const [gridH, setGridH] = useState(300); // 日期网格容器实测高度（px），窗口拉伸时更新
 
-  // 挂件窗口背景透明 + 跟随主窗口主题
+  // 挂件窗口背景透明：必须覆盖 html 自身（index.html 给 html.light/html.dark 刷了 !important 背景色）
   useEffect(() => {
     const style = document.createElement("style");
-    style.textContent = "html.light body, html.dark body { background: transparent !important; }";
+    style.textContent = "html, html.light, html.dark, body, #root { background: transparent !important; }";
     document.head.appendChild(style);
     const applyTheme = () => {
       const t = localStorage.getItem("planner-theme") === "dark" ? "dark" : "light";
@@ -195,7 +197,9 @@ function WidgetCalendar() {
 
   return (
     <div
-      className="absolute inset-2 flex select-none flex-col overflow-hidden rounded-2xl border border-border/70 shadow-2xl backdrop-blur"
+      className={`absolute inset-2 flex select-none flex-col overflow-hidden rounded-2xl backdrop-blur ${
+        settings.frame ? "border border-border/70 shadow-2xl" : ""
+      }`}
       style={cardStyle}
     >
       {/* 拖拽条 */}
@@ -582,6 +586,24 @@ function WidgetCalendar() {
                   <span
                     className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${
                       settings.showLunar ? "left-3.5" : "left-0.5"
+                    }`}
+                  />
+                </button>
+              </label>
+              <label className="flex cursor-pointer items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">显示边框阴影</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={settings.frame}
+                  onClick={() => patch({ frame: !settings.frame })}
+                  className={`relative h-4 w-7 rounded-full transition-colors ${
+                    settings.frame ? "bg-primary" : "bg-muted"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${
+                      settings.frame ? "left-3.5" : "left-0.5"
                     }`}
                   />
                 </button>
