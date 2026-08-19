@@ -2,10 +2,11 @@
 # 触发方式：推送 v* 标签（如 v1.1.0）或手动运行 workflow_dispatch
 # 产物：GitHub draft Release 附件（Windows nsis / macOS dmg）
 #
-# 关键设计：多平台并行时若每个 job 各自调用 tauri-action 创建 release，
-# 会偶发「release 已存在(409)」竞态导致 release 漏建。这里拆出独立的
-# create-release job 先建好 draft release，再把 releaseId 传给各构建 job，
-# 构建 job 只负责上传资产，不再创建 release，彻底消除竞态。
+# 关键设计：
+# 1) create-release 单平台先建好 draft release（消除多平台并行自建 release 的 409 竞态）；
+# 2) build 双平台并行只负责「构建 + 上传资产」，不再触发任何 release 创建逻辑；
+#    上传改用 softprops/action-gh-release（按 tag 找到已建 draft 并追加资产），
+#    比 tauri-action 的 releaseId 模式更可控、报错更易定位。
 name: 构建桌面版
 
 on:
@@ -18,15 +19,12 @@ permissions:
   contents: write
 
 jobs:
-  # 单独一个平台预建 draft release，输出 release_id 供构建 job 复用
+  # 单独一个平台预建 draft release，供构建 job 复用（按 tag 找到并追加资产）
   create-release:
     runs-on: ubuntu-latest
-    outputs:
-      release_id: ${{ steps.create.outputs.id }}
     steps:
       - uses: actions/checkout@v5
       - name: 创建 draft release
-        id: create
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
@@ -69,9 +67,18 @@ jobs:
       - name: 生成全套应用图标（含 icns/ico）
         run: pnpm tauri icon assets/icons/工作计划管理工作台.png
 
-      - name: 构建安装包并上传到已建 release
-        uses: tauri-apps/tauri-action@v0
+      - name: 构建安装包（tauri build，自动先执行 pnpm build）
+        run: pnpm tauri build
+
+      - name: 上传资产到已建 draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          fail_on_unmatched_files: false
+          files: |
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.msi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          releaseId: ${{ needs.create-release.outputs.release_id }}
