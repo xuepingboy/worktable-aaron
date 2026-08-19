@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { MoreMenu } from "./MoreMenu";
 import { ReminderCenter } from "./ReminderCenter";
 import { usePlannerStore } from "@/store/plannerStore";
+import { loadStorage } from "@/lib/storage";
 
 const THEME_KEY = "planner-theme";
 
@@ -32,6 +33,16 @@ export function AppShell() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
+
+  // 跨窗口数据同步：桌面挂件（/widget）或其他窗口改动 localStorage 后刷新本窗口 store
+  useEffect(() => {
+    const onStorage = () => {
+      const s = loadStorage();
+      usePlannerStore.setState({ tasks: s.tasks, goals: s.goals, recurringInstances: s.recurringInstances });
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   // 全局快捷键：N 新增任务；1-4 切换视图
   useEffect(() => {

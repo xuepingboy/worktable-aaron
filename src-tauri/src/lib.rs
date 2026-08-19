@@ -79,19 +79,45 @@ fn autostart_enabled(app: tauri::AppHandle) -> bool {
 
 // ── 桌面挂件（第二个透明置顶窗口）────────────────────────────
 
-/// 显示/隐藏桌面月历挂件；显示时定位到当前显示器右上角
+/// 挂件位置记忆文件（应用数据目录，文本格式 "x,y"；零依赖，无需额外插件）
+fn widget_pos_path(app: &tauri::AppHandle) -> std::path::PathBuf {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join("widget-pos.txt")
+}
+
+/// 应用挂件位置：有记忆则恢复，否则定位当前显示器右上角
+fn apply_widget_position(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("widget") {
+        if let Ok(text) = std::fs::read_to_string(widget_pos_path(app)) {
+            if let Some((x, y)) = text.trim().split_once(',') {
+                if let (Ok(x), Ok(y)) = (x.parse::<i32>(), y.parse::<i32>()) {
+                    let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+                    return;
+                }
+            }
+        }
+        // 无记忆 → 当前显示器右上角
+        if let Ok(Some(mon)) = w.current_monitor() {
+            let size = w.outer_size().unwrap_or_default();
+            let msize = mon.size();
+            let x = (msize.width as i32 - size.width as i32 - 24).max(0);
+            let _ = w.set_position(tauri::PhysicalPosition::new(x, 48));
+        }
+    }
+}
+
+/// 显示/隐藏桌面月历挂件；显示时恢复记忆位置（无记忆则右上角）
 #[tauri::command]
 fn toggle_widget(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("widget") {
         if w.is_visible().unwrap_or(false) {
             w.hide().map_err(|e| e.to_string())?;
         } else {
-            if let Ok(Some(mon)) = w.current_monitor() {
-                let size = w.outer_size().unwrap_or_default();
-                let msize = mon.size();
-                let x = (msize.width as i32 - size.width as i32 - 24).max(0);
-                let _ = w.set_position(tauri::PhysicalPosition::new(x, 48));
-            }
+            apply_widget_position(&app);
             let _ = w.show();
             let _ = w.set_always_on_top(true);
         }
@@ -108,12 +134,59 @@ fn set_widget_passthrough(enabled: bool, app: tauri::AppHandle) -> Result<(), St
     Ok(())
 }
 
+/// 挂件「贴桌面」（Windows）：置于所有窗口之下、壁纸之上（bottom-most）。
+/// 贴桌面需取消置顶（二者互斥）；取消贴桌面恢复置顶。
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn set_widget_stick(stick: bool, app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::window::WindowExtWindows;
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    };
+    if let Some(w) = app.get_webview_window("widget") {
+        let _ = w.set_always_on_top(!stick);
+        if stick {
+            const HWND_BOTTOM: HWND = 1 as HWND;
+            unsafe {
+                SetWindowPos(
+                    w.hwnd(),
+                    HWND_BOTTOM,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 非 Windows：贴桌面无对应 API，静默成功（前端开关仍可显示）
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn set_widget_stick(_stick: bool, _app: tauri::AppHandle) -> Result<(), String> {
+    Ok(())
+}
+
 /// 从挂件唤起主窗口
 #[tauri::command]
 fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("main") {
         w.show().map_err(|e| e.to_string())?;
         w.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// 开始拖拽调整挂件窗口大小（右下角手柄；无边框窗口无系统 resize 边缘，需手动调用）
+#[tauri::command]
+fn start_widget_resize(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("widget") {
+        w.start_resize_dragging(tauri::ResizeDirection::SouthEast)
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -223,11 +296,15 @@ pub fn run() {
             check_for_update,
             toggle_widget,
             set_widget_passthrough,
+            set_widget_stick,
             show_main_window,
+            start_widget_resize,
         ])
         .setup(|app| {
             #[cfg(desktop)]
             setup_tray(app.handle())?;
+            // 恢复挂件记忆位置（无记忆时由 apply_widget_position 落右上角）
+            apply_widget_position(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -235,6 +312,23 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();
                 api.prevent_close();
+            }
+            // 挂件移动 → 节流记忆位置（>800ms 才写盘，避免拖动时高频 IO）
+            if window.label() == "widget" {
+                if let tauri::WindowEvent::Moved(pos) = event {
+                    use std::sync::atomic::{AtomicU64, Ordering};
+                    static LAST_MS: AtomicU64 = AtomicU64::new(0);
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+                    if now.saturating_sub(LAST_MS.load(Ordering::Relaxed)) > 800 {
+                        LAST_MS.store(now, Ordering::Relaxed);
+                        let app = window.app_handle();
+                        let text = format!("{},{}", pos.x, pos.y);
+                        let _ = std::fs::write(widget_pos_path(app), text);
+                    }
+                }
             }
         });
 

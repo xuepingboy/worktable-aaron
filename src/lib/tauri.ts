@@ -91,6 +91,16 @@ export async function setWidgetPassthrough(enabled: boolean): Promise<string | n
   }
 }
 
+/** 挂件贴桌面（true=置于所有窗口之下；Windows 生效，其他平台静默成功） */
+export async function setWidgetStick(stick: boolean): Promise<string | null> {
+  try {
+    await invoke("set_widget_stick", { stick });
+    return null;
+  } catch (e) {
+    return typeof e === "string" ? e : "设置贴桌面失败";
+  }
+}
+
 /** 从挂件唤起主窗口 */
 export async function showMainWindow(): Promise<string | null> {
   try {
@@ -98,5 +108,15 @@ export async function showMainWindow(): Promise<string | null> {
     return null;
   } catch (e) {
     return typeof e === "string" ? e : "打开主窗口失败";
+  }
+}
+
+/** 开始拖拽调整挂件大小（右下角手柄，无边框窗口专用） */
+export async function startWidgetResize(): Promise<string | null> {
+  try {
+    await invoke("start_widget_resize");
+    return null;
+  } catch (e) {
+    return typeof e === "string" ? e : "调整挂件大小失败";
   }
 }

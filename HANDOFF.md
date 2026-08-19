@@ -94,6 +94,8 @@
 - [x] **Tauri 桌面壳（2026-08-19）**：`src-tauri/` 脚手架（dialog/opener/notification/autostart 插件 + 托盘 + 关闭到托盘 + updater 可选特性）+ `.github/workflows/release.yml`（Windows/macOS 云端构建，无需本地 Rust）+ 前端桥 `src/lib/tauri.ts`（`__TAURI_INTERNALS__` 零依赖）
 - [x] **P1 附件链接模式（2026-08-19）**：`Attachment.mode`（link/blob）+ `path`；TaskForm 桌面端走原生对话框选文件→存路径（不复制）；打开附件→系统默认程序（文件缺失 toast 兜底）；TaskCard 附件角标可点击 + 「链」标识
 - [x] **P2 原生能力（2026-08-19）**：提醒引擎 Tauri 下走原生通知；MoreMenu 桌面端区（开机自启开关 + 检查更新）；托盘/关闭到托盘在 Rust 侧；自动更新为可选特性（需生成签名密钥，见 DESKTOP.md）
+- [x] **桌面月历挂件骨架（2026-08-19）**：Tauri 第二个透明置顶窗口（/widget 路由）+ 紧凑月历（任务圆点/今日高亮/翻月/拖拽条）+ 托盘与 MoreMenu 显隐入口 + storage 事件实时同步；参考 BUG-gao/floating-todo。P2 待续：穿透/贴桌面/透明度/位置记忆
+- [x] **挂件增强（2026-08-19，未推送）**：任务名优先级底色（PRIORITY_BG 同月视图）；设置面板（字体大小/透明度/底色色板/农历开关/节假日开关/贴桌面）；农历+节气+节假日+调休（lunar-typescript，2026 数据齐全）；Rust：贴桌面（SetWindowPos HWND_BOTTOM）+ 位置记忆（widget-pos.txt 节流写盘）；测试 75→82
 - [ ] **桌面版首版落地（待办）**：建 GitHub 仓库 → 推代码 → push v1.0.0 标签触发 Actions 出安装包；或走腾讯云 Cloud Studio 手动构建（流程见 DESKTOP.md）
 - [ ] **P2** 番茄钟（用户曾提及但本轮确认暂不做，后续可评估）
 
