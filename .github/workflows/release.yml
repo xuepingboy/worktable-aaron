@@ -1,0 +1,54 @@
+# 工作计划管理工作台 - 云端构建桌面安装包（无需本地 Rust）
+# 触发方式：推送 v* 标签（如 v1.0.0）或手动运行 workflow_dispatch
+# 产物：GitHub Release 附件（Windows .exe/.msi、macOS .app/.dmg）
+name: 构建桌面版
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 安装前端依赖（自动同步 lockfile）
+        run: pnpm install
+
+      - name: 生成全套应用图标（含 icns/ico）
+        run: pnpm tauri icon assets/icons/工作计划管理工作台.png
+
+      - name: 构建安装包并发布
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 自动更新签名密钥（开启 updater 特性后必须配置）：
+          # TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 工作计划管理工作台 v__VERSION__
+          releaseDraft: true
+          prerelease: false

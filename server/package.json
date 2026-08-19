@@ -1,0 +1,10 @@
+{
+  "name": "planner-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "工作计划管理工作台 - 绿色版静态托管服务（零依赖）",
+  "scripts": {
+    "start": "node index.js"
+  }
+}

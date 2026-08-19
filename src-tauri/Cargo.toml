@@ -1,0 +1,36 @@
+[package]
+name = "planner"
+version = "1.0.0"
+description = "工作计划管理工作台桌面端"
+authors = ["planner"]
+edition = "2021"
+
+# Tauri 桌面壳：Rust 侧保持最小，前端为现有 React 应用（dist/ 产物）
+[lib]
+name = "planner_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# 自动更新：默认关闭（需先 `pnpm tauri signer generate` 生成密钥并填入 tauri.conf.json，
+# 再 `pnpm tauri build --features updater` 或把 updater 加入默认特性）
+tauri-plugin-updater = { version = "2", optional = true }
+
+[features]
+updater = ["dep:tauri-plugin-updater"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

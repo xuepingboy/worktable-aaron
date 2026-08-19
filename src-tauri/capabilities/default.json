@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "主窗口默认能力（所有插件调用均走 Rust 命令，无需额外 IPC 权限）",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

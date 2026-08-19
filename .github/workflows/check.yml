@@ -1,0 +1,44 @@
+# 每次推送自动检查：前端类型/测试 + Rust 编译（无需本地工具链）
+# 推送代码即可看到检查结果，不必等打 v* 标签
+name: 检查
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: 前端：安装 + 类型检查 + 测试
+        run: |
+          pnpm install
+          pnpm exec tsc --noEmit
+          pnpm test
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 生成全套应用图标（含 icns/ico）
+        run: pnpm tauri icon assets/icons/工作计划管理工作台.png
+
+      - name: Rust：编译检查
+        run: cd src-tauri && cargo check
