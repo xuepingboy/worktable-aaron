@@ -120,3 +120,14 @@ export async function startWidgetResize(): Promise<string | null> {
     return typeof e === "string" ? e : "调整挂件大小失败";
   }
 }
+
+/** 设置挂件窗口整体透明度（0~1）。内部 60ms 防抖，避免滑块高频调用 Rust。
+ *  弹窗（设置/详情）打开时由 widget 传 1 拉满，关闭恢复滑块值。 */
+let opacityTimer: ReturnType<typeof setTimeout> | undefined;
+export function setWidgetOpacity(opacity: number): void {
+  if (!isTauri) return;
+  if (opacityTimer) clearTimeout(opacityTimer);
+  opacityTimer = setTimeout(() => {
+    invoke("set_widget_opacity", { value: opacity }).catch(() => {});
+  }, 60);
+}

@@ -195,6 +195,17 @@ fn start_widget_resize(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 设置挂件窗口整体透明度（0.0~1.0）。透明度由 OS 合成器处理，与任何 DOM 样式解耦——
+/// 这是把「透明度」从 CSS 下沉到 OS 窗口、彻底去除白边/白底的关键（方案 A）。
+#[tauri::command]
+fn set_widget_opacity(value: f64, app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_window("widget") {
+        let v = value.clamp(0.0, 1.0);
+        w.set_opacity(v).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 // ── 应用信息 / 自动更新（P2，更新需 updater 特性）────────────
 
 #[tauri::command]
@@ -303,6 +314,7 @@ pub fn run() {
             set_widget_stick,
             show_main_window,
             start_widget_resize,
+            set_widget_opacity,
         ])
         .setup(|app| {
             #[cfg(desktop)]

@@ -1,7 +1,9 @@
 // 桌面月历挂件（Tauri 第二个透明置顶窗口，路由 /widget）
 // 日格显示「任务名（优先级底色）+ 农历/节气/节假日/调休」，双击日格弹快捷浮窗（完成/改名/删除）
-// 设置：字体大小 / 透明度 / 日历底色 / 显示农历 / 显示节假日调休 / 贴桌面（桌面端）
+// 设置：字体大小 / 透明度（窗口级）/ 显示农历 / 显示节假日调休 / 贴桌面（桌面端）
 // 数据与主窗口共享（同一 origin 的 localStorage），storage 事件实时同步
+// 透明策略（A+D）：透明度下沉到 OS 窗口（Rust setOpacity），内容层背景恒透明；
+// 作用域透明 reset 保证任何主题背景 token 都不会渗入透明层（仅 data-surface 弹窗有底）。
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { addDays, addMonths, format, startOfMonth, startOfWeek } from "date-fns";
@@ -22,7 +24,7 @@ import { taskVisibleOnDate, todayStr } from "@/lib/date";
 import { expandRecurringTasks } from "@/lib/repeat";
 import { PRIORITY_BG } from "@/lib/utils";
 import { dayCellLabel, dayDetailText, getDayLunarInfo } from "@/lib/lunarInfo";
-import { isTauri, setWidgetStick, showMainWindow, startWidgetResize, toggleWidget } from "@/lib/tauri";
+import { isTauri, setWidgetOpacity, setWidgetStick, showMainWindow, startWidgetResize, toggleWidget } from "@/lib/tauri";
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 const SETTINGS_KEY = "planner-widget-settings";
@@ -35,32 +37,19 @@ const MAX_LINES_CAP = 6;
 
 interface WidgetSettings {
   fontSize: number; // 任务名字号 9~15
-  opacity: number; // 卡片不透明度 0.35~1
-  bg: string; // "default" 跟随主题 | hex 自定义底色
+  opacity: number; // 窗口透明度 0.35~1（Rust setOpacity，非 DOM 样式）
   showLunar: boolean; // 显示农历/节气/节日小字
   showHoliday: boolean; // 显示法定节假日与调休（依赖 showLunar 开启才有空间）
   stick: boolean; // 贴桌面（Windows）
-  frame: boolean; // 显示前端卡片边框+阴影
 }
 
 const DEFAULT_SETTINGS: WidgetSettings = {
   fontSize: 9,
   opacity: 0.95,
-  bg: "default",
   showLunar: true,
   showHoliday: true,
   stick: false,
-  frame: false,
 };
-
-const BG_PRESETS: { key: string; label: string; color: string }[] = [
-  { key: "default", label: "默认", color: "" },
-  { key: "#ffffff", label: "白", color: "#ffffff" },
-  { key: "#e8f4fc", label: "浅蓝", color: "#e8f4fc" },
-  { key: "#fdf6e3", label: "米黄", color: "#fdf6e3" },
-  { key: "#eef7ee", label: "浅绿", color: "#eef7ee" },
-  { key: "#333333", label: "深灰", color: "#333333" },
-];
 
 function loadSettings(): WidgetSettings {
   try {
@@ -70,14 +59,6 @@ function loadSettings(): WidgetSettings {
   } catch {
     return DEFAULT_SETTINGS;
   }
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const n = parseInt(hex.replace("#", ""), 16);
-  const r = (n >> 16) & 255;
-  const g = (n >> 8) & 255;
-  const b = n & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function WidgetCalendar() {
@@ -96,10 +77,13 @@ function WidgetCalendar() {
   const gridRef = useRef<HTMLDivElement>(null);
   const [gridH, setGridH] = useState(300); // 日期网格容器实测高度（px），窗口拉伸时更新
 
-  // 挂件窗口背景透明：必须覆盖 html 自身（index.html 给 html.light/html.dark 刷了 !important 背景色）
+  // 挂件窗口背景透明 + 作用域透明 reset：内容层背景恒透明，只有 data-surface 弹窗才有底，
+  // 杜绝任何 Tailwind 主题背景 token（bg-background / bg-muted 等）渗入透明层
   useEffect(() => {
     const style = document.createElement("style");
-    style.textContent = "html, html.light, html.dark, body, #root { background: transparent !important; }";
+    style.textContent =
+      "html, html.light, html.dark, body, #root { background: transparent !important; }\n" +
+      "[data-widget-root] *:not([data-surface]):not([data-surface] *) { background-color: transparent !important; box-shadow: none !important; }";
     document.head.appendChild(style);
     const applyTheme = () => {
       const t = localStorage.getItem("planner-theme") === "dark" ? "dark" : "light";
@@ -118,6 +102,12 @@ function WidgetCalendar() {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     if (isTauri) void setWidgetStick(settings.stick);
   }, [settings]);
+
+  // 透明度下沉到 OS 窗口：滑块调窗口透明度；弹窗（设置/详情）打开时拉满 1 保证清晰，关闭恢复滑块值
+  useEffect(() => {
+    if (!isTauri) return;
+    void setWidgetOpacity(settingsOpen || openDay ? 1 : settings.opacity);
+  }, [settings.opacity, settingsOpen, openDay]);
 
   // 数据实时同步：主窗口写 localStorage 后触发 storage 事件 → 重载 store
   useEffect(() => {
@@ -181,34 +171,17 @@ function WidgetCalendar() {
   };
 
   const popupTasks = openDay ? dayTasks(openDay) : [];
-  const selectedInfo = getDayLunarInfo(selected);
-
-  // 卡片底色：frame=true 时跟随主题（css 变量 + 透明度）或自定义 hex；
-  // frame=false（无边框模式）时背景完全透明，仅文字/网格悬浮在桌面上，消除白底/白边
-  const cardStyle: CSSProperties = settings.frame
-    ? settings.bg === "default"
-      ? {
-          backgroundColor: `color-mix(in srgb, var(--background) ${Math.round(
-            settings.opacity * 100
-          )}%, transparent)`,
-        }
-      : { backgroundColor: hexToRgba(settings.bg, settings.opacity) }
-    : {};
 
   const patch = (p: Partial<WidgetSettings>) => setSettings((s) => ({ ...s, ...p }));
 
   return (
     <div
-      className={`absolute inset-2 flex select-none flex-col overflow-hidden rounded-2xl ${
-        settings.frame ? "backdrop-blur border border-border/70 shadow-2xl" : ""
-      }`}
-      style={cardStyle}
+      data-widget-root
+      className="absolute inset-2 flex select-none flex-col overflow-hidden rounded-2xl"
     >
       {/* 拖拽条 */}
       <div
-        className={`flex h-9 items-center justify-between pl-2.5 pr-1 ${
-          settings.frame ? "border-b border-border/50" : ""
-        }`}
+        className="flex h-9 items-center justify-between pl-2.5 pr-1"
         style={{ WebkitAppRegion: "drag" } as CSSProperties}
       >
         <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -220,7 +193,7 @@ function WidgetCalendar() {
               type="button"
               onClick={openMain}
               title="打开主界面"
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="rounded-md p-1.5 text-muted-foreground hover:text-primary"
             >
               <ExternalLink size={13} />
             </button>
@@ -228,7 +201,7 @@ function WidgetCalendar() {
               type="button"
               onClick={hideWidget}
               title="隐藏挂件"
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="rounded-md p-1.5 text-muted-foreground hover:text-primary"
             >
               <X size={13} />
             </button>
@@ -239,8 +212,8 @@ function WidgetCalendar() {
           type="button"
           onClick={() => setSettingsOpen((v) => !v)}
           title="挂件设置"
-          className={`rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground ${
-            settingsOpen ? "bg-muted text-foreground" : ""
+          className={`rounded-md p-1.5 text-muted-foreground hover:text-primary ${
+            settingsOpen ? "text-primary" : ""
           }`}
         >
           <Settings size={13} />
@@ -252,7 +225,7 @@ function WidgetCalendar() {
         <button
           type="button"
           onClick={() => setCursor((c) => addMonths(c, -1))}
-          className="rounded-md p-1 text-muted-foreground hover:bg-muted"
+          className="rounded-md p-1 text-muted-foreground hover:text-primary"
           aria-label="上一月"
         >
           <ChevronLeft size={14} />
@@ -266,7 +239,7 @@ function WidgetCalendar() {
         <button
           type="button"
           onClick={() => setCursor((c) => addMonths(c, 1))}
-          className="rounded-md p-1 text-muted-foreground hover:bg-muted"
+          className="rounded-md p-1 text-muted-foreground hover:text-primary"
           aria-label="下一月"
         >
           <ChevronRight size={14} />
@@ -321,15 +294,15 @@ function WidgetCalendar() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") setOpenDay(ds);
               }}
-              className={`flex min-h-0 cursor-pointer flex-col overflow-hidden rounded-lg px-1 py-0.5 text-left transition-colors ${
-                ds === selected ? "bg-primary/10 ring-1 ring-primary/30" : "hover:bg-muted"
+              className={`flex min-h-0 cursor-pointer flex-col overflow-hidden rounded-lg border border-border/15 px-1 py-0.5 text-left transition-colors ${
+                ds === selected ? "ring-1 ring-primary/50" : "hover:ring-1 hover:ring-border/40"
               } ${inMonth ? "" : "opacity-35"}`}
             >
               <div className="flex items-center justify-between gap-0.5">
                 <span className="flex min-w-0 items-center gap-0.5">
                   <span
                     className={`flex h-4 min-w-4 items-center justify-center rounded px-0.5 text-[10px] leading-none ${
-                      isToday ? "bg-primary font-semibold text-primary-foreground" : "text-foreground"
+                      isToday ? "font-bold text-primary" : "text-foreground"
                     }`}
                   >
                     {d.getDate()}
@@ -337,7 +310,7 @@ function WidgetCalendar() {
                   {extra > 0 && (
                     <span
                       title={`还有 ${extra} 项任务`}
-                      className="shrink-0 rounded-full bg-primary/15 px-1 text-[8px] font-semibold leading-[14px] text-primary"
+                      className="shrink-0 rounded-full px-1 text-[8px] font-semibold leading-[14px] ring-1 ring-primary/50 text-primary"
                     >
                       +{extra}
                     </span>
@@ -380,9 +353,7 @@ function WidgetCalendar() {
       </div>
 
       {/* 底部：选中日期任务数 + 农历/节日详情 */}
-      <div className={`px-3 pb-1.5 pr-6 pt-1.5 text-[11px] leading-snug text-muted-foreground ${
-        settings.frame ? "border-t border-border/50" : ""
-      }`}>
+      <div className="px-3 pb-1.5 pr-6 pt-1.5 text-[11px] leading-snug text-muted-foreground">
         <div className="flex items-center justify-between">
           <span>
             {format(new Date(`${selected}T00:00:00`), "M月d日")} 共{" "}
@@ -414,8 +385,8 @@ function WidgetCalendar() {
       {/* 快捷小浮窗：双击日格弹出（居中，非全屏） */}
       {openDay && (
         <>
-          <div className="absolute inset-0 z-10 bg-black/10" onClick={() => setOpenDay(null)} />
-          <div className="absolute left-1/2 top-1/2 z-20 flex max-h-[240px] w-[272px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
+          <div className="absolute inset-0 z-10 bg-black/10" data-surface onClick={() => setOpenDay(null)} />
+          <div data-surface className="absolute left-1/2 top-1/2 z-20 flex max-h-[240px] w-[272px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
             <div className="flex items-center justify-between border-b border-border/60 px-3 py-1.5">
               <span className="text-xs font-medium">
                 {format(new Date(`${openDay}T00:00:00`), "M月d日")} · {popupTasks.length} 项
@@ -506,8 +477,8 @@ function WidgetCalendar() {
       {/* 设置浮层（居中小组件） */}
       {settingsOpen && (
         <>
-          <div className="absolute inset-0 z-10 bg-black/10" onClick={() => setSettingsOpen(false)} />
-          <div className="absolute left-1/2 top-1/2 z-20 flex max-h-[320px] w-[264px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
+          <div className="absolute inset-0 z-10 bg-black/10" data-surface onClick={() => setSettingsOpen(false)} />
+          <div data-surface className="absolute left-1/2 top-1/2 z-20 flex max-h-[320px] w-[264px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
             <div className="flex items-center justify-between border-b border-border/60 px-3 py-1.5">
               <span className="flex items-center gap-1.5 text-xs font-medium">
                 <Settings size={12} /> 挂件设置
@@ -554,29 +525,6 @@ function WidgetCalendar() {
                   className="w-full"
                 />
               </div>
-              {/* 日历底色 */}
-              <div>
-                <div className="mb-1 text-[11px] text-muted-foreground">日历底色</div>
-                <div className="flex items-center gap-1.5">
-                  {BG_PRESETS.map((p) => (
-                    <button
-                      key={p.key}
-                      type="button"
-                      title={p.label}
-                      onClick={() => patch({ bg: p.key })}
-                      className={`flex h-6 w-6 items-center justify-center rounded-md border text-[9px] transition-colors ${
-                        settings.bg === p.key
-                          ? "border-primary ring-1 ring-primary/50"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                      style={p.color ? { backgroundColor: p.color } : undefined}
-                    >
-                      {p.key === "default" && <span className="text-[8px] text-muted-foreground">默</span>}
-                      {settings.bg === p.key && p.color && <Check size={11} className="text-foreground" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
               {/* 开关 */}
               <label className="flex cursor-pointer items-center justify-between text-[11px]">
                 <span className="text-muted-foreground">显示农历 / 节气 / 节日</span>
@@ -592,24 +540,6 @@ function WidgetCalendar() {
                   <span
                     className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${
                       settings.showLunar ? "left-3.5" : "left-0.5"
-                    }`}
-                  />
-                </button>
-              </label>
-              <label className="flex cursor-pointer items-center justify-between text-[11px]">
-                <span className="text-muted-foreground">显示边框阴影</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={settings.frame}
-                  onClick={() => patch({ frame: !settings.frame })}
-                  className={`relative h-4 w-7 rounded-full transition-colors ${
-                    settings.frame ? "bg-primary" : "bg-muted"
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${
-                      settings.frame ? "left-3.5" : "left-0.5"
                     }`}
                   />
                 </button>
