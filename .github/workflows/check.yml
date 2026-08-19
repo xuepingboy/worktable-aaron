@@ -41,6 +41,7 @@ jobs:
         run: pnpm tauri icon assets/icons/工作计划管理工作台.png
 
       - name: Rust：编译检查
+        shell: bash
         run: |
           cd src-tauri
           cargo check --message-format=short 2>&1 | tee /tmp/cargo-check.log
