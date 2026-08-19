@@ -183,28 +183,32 @@ function WidgetCalendar() {
   const popupTasks = openDay ? dayTasks(openDay) : [];
   const selectedInfo = getDayLunarInfo(selected);
 
-  // 卡片底色：默认跟随主题（css 变量 + 透明度），自定义用 hex + 透明度
-  const cardStyle: CSSProperties =
-    settings.bg === "default"
+  // 卡片底色：frame=true 时跟随主题（css 变量 + 透明度）或自定义 hex；
+  // frame=false（无边框模式）时背景完全透明，仅文字/网格悬浮在桌面上，消除白底/白边
+  const cardStyle: CSSProperties = settings.frame
+    ? settings.bg === "default"
       ? {
           backgroundColor: `color-mix(in srgb, var(--background) ${Math.round(
             settings.opacity * 100
           )}%, transparent)`,
         }
-      : { backgroundColor: hexToRgba(settings.bg, settings.opacity) };
+      : { backgroundColor: hexToRgba(settings.bg, settings.opacity) }
+    : {};
 
   const patch = (p: Partial<WidgetSettings>) => setSettings((s) => ({ ...s, ...p }));
 
   return (
     <div
-      className={`absolute inset-2 flex select-none flex-col overflow-hidden rounded-2xl backdrop-blur ${
-        settings.frame ? "border border-border/70 shadow-2xl" : ""
+      className={`absolute inset-2 flex select-none flex-col overflow-hidden rounded-2xl ${
+        settings.frame ? "backdrop-blur border border-border/70 shadow-2xl" : ""
       }`}
       style={cardStyle}
     >
       {/* 拖拽条 */}
       <div
-        className="flex h-9 items-center justify-between border-b border-border/50 pl-2.5 pr-1"
+        className={`flex h-9 items-center justify-between pl-2.5 pr-1 ${
+          settings.frame ? "border-b border-border/50" : ""
+        }`}
         style={{ WebkitAppRegion: "drag" } as CSSProperties}
       >
         <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -376,7 +380,9 @@ function WidgetCalendar() {
       </div>
 
       {/* 底部：选中日期任务数 + 农历/节日详情 */}
-      <div className="border-t border-border/50 px-3 pb-1.5 pr-6 pt-1.5 text-[11px] leading-snug text-muted-foreground">
+      <div className={`px-3 pb-1.5 pr-6 pt-1.5 text-[11px] leading-snug text-muted-foreground ${
+        settings.frame ? "border-t border-border/50" : ""
+      }`}>
         <div className="flex items-center justify-between">
           <span>
             {format(new Date(`${selected}T00:00:00`), "M月d日")} 共{" "}
