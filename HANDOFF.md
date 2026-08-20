@@ -78,7 +78,7 @@
   - `src/routes/_layout.*.tsx` → 今日/周/月/明细四视图
   - `server/index.js` → 绿色版静态托管（原生 node:http，零依赖，public/ + /api/health，端口 3017）
   - `scripts/build.mjs` → 绿色文件夹打包（复用邮件群发方案）：tsc+vite build → dist → server/public → 下载内置 Node（v20.15.0，缓存 release/.cache/）→ 组装 release/工作计划管理工作台/（node.exe+server+启动.bat+README），`--zip` 可选。**图标处理（用户决策）**：不打包进绿色版、启动不自动创建桌面快捷方式，用户自行改快捷方式图标（ICO 在 assets/icons/ 与桌面副本）
-  - `src-tauri/` → **Tauri 2 桌面壳（2026-08-19 新增）**：lib.rs 含 pick_attachment_paths/open_attachment/notify/set_autostart/check_for_update 命令 + 托盘（关闭到托盘）+ updater 可选特性；tauri.conf.json 前端产物指向 `../dist`；`.github/workflows/release.yml` 云端出 Windows/macOS 安装包（无需本地 Rust）
+  - `src-tauri/` → **Tauri 2 桌面壳（2026-08-19 新增）**：lib.rs 含 pick_attachment_paths/open_attachment/notify/set_autostart/check_for_update 命令 + 托盘（关闭到托盘）+ updater 可选特性；tauri.conf.json 前端产物指向 `../dist`；`.github/workflows/release.yml` 云端出 Windows 安装包（2026-08-20 起由 Meoo 回导改为**单平台 nsis**，原双平台 macOS dmg 已弃用；release.yml 现为 `tauri-action@v0` 单 job，不再用 softprops 双平台矩阵）
   - `public/` → **PWA（2026-08-19 新增）**：manifest.webmanifest + sw.js（离线壳缓存）+ icons/（192/512/maskable）
 - **数据流/模块依赖**：plannerStore 是唯一状态源，各视图经 `usePlannerStore` 选择器取数；写操作经 store action 同步落 localStorage；重复任务在查询时经 `expandRecurringTasks` 展开虚拟实例（id 格式 `${模板id}::${日期}`）并合并 `recurringInstances` 独立状态。
 - **约定**：自建组件一律具名导出 `export function Xxx`；优先级样式统一引用 `src/lib/utils.ts` 常量，禁止本地重复定义；日期比较必须用 date-fns 本地时区安全 API；`taskVisibleOnDate` 是唯一可见性过滤入口，禁止 `t.date === x` 直判。
@@ -154,3 +154,11 @@
 2. 告诉我下一步第一个要做的任务；
 3. 开始执行前，列出你会用到的工作区路径。
 ```
+
+## 2026-08-20 更新：Meoo 平台往返 + 出包改为 Windows 单平台
+- **Meoo 往返流程跑通**：本地仓库 → 按 README 打包 ZIP 导 Meoo → 平台编辑 → 导出目录 `F:/工作计划管理工作台/meoo_zip_1787185125974` → `robocopy` 安全同步回本地（排除 node_modules/.git/dist/target/各 cache 目录，不 /PURGE）→ `git push`（需 `env -u HTTP_PROXY...` 绕过已关闭的代理客户端）。
+- **回导发现两处回归并已处理**：① `Cargo.toml` 导出版缺 `window-opacity` feature（会让窗口级透明度命令编译失败 E0599）→ 同步后 `sed` 强制加回；② `release.yml` + `tauri.conf.json` 被 Meoo「create-desktop」模板改回 **Windows 单平台**（release.yml 用 `tauri-action@v0` 单 job、tauri.conf `targets:["nsis"]` 删 dmg/icns）。
+- **用户拍板：接受 Windows 单平台**，故保留导出版配置（不再双平台）。但 `tauri.conf.json` 的 `security.csp` 由 null 变完整 CSP 属安全增强，保留。
+- 合法新增已入库：`.husky/pre-commit`（lint-staged）、`DEPLOY.md`（桌面打包发布流程）、`release.bat`（Windows 一键发布）、`package.json` 加 husky+lint-staged+`prepare:husky`+`build: tsc --noEmit && vite build`。
+- 校验：`pnpm exec tsc --noEmit` 通过。提交 `65452c0` → push `528bd02..65452c0` 成功。
+- ⚠️ 注意：`tauri-action@v0` 为旧浮动 tag，下次出包若失败需 pin 具体版本；今后桌面安装包仅 Windows nsis，无 macOS dmg（如要恢复双平台，需把 release.yml/tauri.conf 改回双平台并重新评估）。
