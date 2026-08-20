@@ -39,7 +39,7 @@
     - P1：tasks/today/SidePanel 视图 useMemo；拖拽逻辑抽 `lib/taskDrag.ts`（isTaskDraggable/buildDropPatch，week/month 复用）+ 8 用例；`loadStorage` 顶层 try-catch（隐私模式可启动）；`build.mjs` 下载 Node 后 SHA256 校验（比对官方 SHASUMS256.txt，网络异常跳过）
     - P2：死依赖清理（移除 21 个未引用 UI 组件 + recharts/framer-motion/react-day-picker/cmdk/vaul/embla/input-otp/@supabase，CSS 79→62KB）；文件拆分（TaskForm 577→379 + RepeatConfigFields、tasks.tsx 521→346 + RecurringTaskRow、week + WeekTaskBlock）；测试增至 **75 用例**（新增 taskDrag 8 / reminder 7 / repeat 扩展 13）
   - **风险记录**：用 sed 按行号删代码曾误删 tasks.tsx（行号偏移）→ 已完整重写修复；**教训：删除代码段禁用 sed 行号，用 Edit 精确匹配或整文件 Write**
-- **进行中**：无（P0+P1+P2 审查优化已交付，tsc + vitest 75 + build + dev 四重验证通过；v1.1.0 桌面版已发布）
+- **进行中**：v1.1.6 已本地完成并推 tag（commit cda0593）等待 Actions 构建出包；挂件设置持久化/白屏/尺寸记忆三项已落地，QA 82 用例全过
 - **未开始**：番茄钟（已确认暂不做）；快速添加框接入 **AI 语义解析**（原 P1 改走「规则优先」方案 A，规则增强已交付；后续 Meoo LLM 接通后可叠加「LLM 兜底」方案 C，`parseQuickAdd` 预留无匹配出口）
 - **最近一次可运行状态**：`pnpm run build` 通过（dist/index.html 正常产出，无 chunk 警告），`pnpm run dev` 在 **3017** 端口启动并返回 200，`pnpm exec tsc --noEmit` 全绿，`pnpm test`（vitest）**75 用例**全绿。Git 不可用，无 commit 号，以「build + dev + tsc + test 四重验证」为可运行基准。
 
@@ -162,3 +162,17 @@
 - 合法新增已入库：`.husky/pre-commit`（lint-staged）、`DEPLOY.md`（桌面打包发布流程）、`release.bat`（Windows 一键发布）、`package.json` 加 husky+lint-staged+`prepare:husky`+`build: tsc --noEmit && vite build`。
 - 校验：`pnpm exec tsc --noEmit` 通过。提交 `65452c0` → push `528bd02..65452c0` 成功。
 - ⚠️ 注意：`tauri-action@v0` 为旧浮动 tag，下次出包若失败需 pin 具体版本；今后桌面安装包仅 Windows nsis，无 macOS dmg（如要恢复双平台，需把 release.yml/tauri.conf 改回双平台并重新评估）。
+
+## 2026-08-20 更新：v1.1.6 挂件设置持久化 + 白屏 + 尺寸记忆（commit cda0593，tag v1.1.6）
+- **需求**：① 启动白屏 ② 挂件记忆拖拽尺寸 ③ 记忆设置项（字体/透明度/贴桌面/节假日/农历）。
+- **架构师磁盘取证**：「设置全丢」根因 = A1 挂载 effect 无条件回写 DEFAULT（footgun，已删）+ A2 环境级 AppData 被清空（LOG.old "Creating DB since it was missing"，待用户排查清空来源）+ A3 dev/prod origin 分裂。
+- **改动（6 文件 +182/−37）**：
+  - lib.rs：`load/save_widget_settings` 命令（widget-settings.json 存 app_data_dir）+ `widget_settings_path`；`apply_widget_position` 4 元组恢复（clamp 260x320，2 元组向后兼容）；on_window_event `Resized`/`Moved` 共用 800ms 节流写 `x,y,w,h`；setup 10s 白屏兜底线程（is_visible 检查后 show）；`toggle_widget` 显示时按已存 stick 应用置顶/贴桌面（serde_json 已有依赖）。
+  - widget.tsx：settings 初始 DEFAULT + `hydratedRef` 防回写 + hydration 异步 load（isTauri→Rust 文件 / 非 Tauri→localStorage 兜底）+ 150ms 防抖保存 + **升级迁移**（load 空→读旧 localStorage→写文件→removeItem）+ setWidgetStick 恢复/会话内生效；删挂载回写 footgun。
+  - tauri.ts：`loadWidgetSettings`/`saveWidgetSettings` 桥。
+  - main.tsx：非 /widget 路径渲染后 double rAF 动态 import `showMainWindow`（browser history 下 pathname 判断可靠）。
+  - tauri.conf.json：main 加 `visible: false`；版本 1.1.5→1.1.6。
+  - **husky pre-commit 修复**：`lint-staged` → 全量 `pnpm exec tsc --noEmit`（lint-staged 的 ["tsc --noEmit"] 会 append 文件列表导致 tsconfig 失效误报 TS17004）。
+- **门禁**：tsc 0 / vite build 2829 modules / vitest 7 文件 82 用例全过 / emoji 零匹配 / QA 独立验证 pass（无 blocking；A1/A2 高优 advisory 已当场修复并复验）。
+- **QA 遗留 advisory（记入 docs/decisions/OPEN-DECISIONS.md，不阻塞）**：A3 尺寸只保底不封顶、A4 节流尾事件丢失、A5 10s 兜底与主动关闭冲突、A6 防抖丢尾、A7 动态 import chunk 警告、A8 写盘非原子、架构师 A2 环境级 AppData 清空来源待排查。
+- **⚠️ 用户侧**：v1.1.6 draft 构建好后 Publish；v1.1.3/v1.1.4 空 draft 记得删；v1.1.5 若已发布则资产与 v1.1.6 并存（v1.1.6 才是本轮修复版）。
