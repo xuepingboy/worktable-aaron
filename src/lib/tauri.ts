@@ -101,6 +101,24 @@ export async function setWidgetStick(stick: boolean): Promise<string | null> {
   }
 }
 
+/** 读取挂件设置（Rust 文件持久化，app_data_dir/widget-settings.json）；无文件返回 null */
+export async function loadWidgetSettings(): Promise<string | null> {
+  try {
+    return await invoke<string>("load_widget_settings");
+  } catch {
+    return null;
+  }
+}
+
+/** 保存挂件设置（Rust 文件持久化，防抖由调用方处理） */
+export async function saveWidgetSettings(json: string): Promise<void> {
+  try {
+    await invoke("save_widget_settings", { json });
+  } catch {
+    // 静默失败：Web 版/非 Tauri 环境直接忽略
+  }
+}
+
 /** 从挂件唤起主窗口 */
 export async function showMainWindow(): Promise<string | null> {
   try {

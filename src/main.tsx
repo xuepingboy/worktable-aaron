@@ -17,6 +17,21 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   </React.StrictMode>
 );
 
+// 主窗口：React 渲染完成后主动显示（配合 tauri.conf visible:false 消除启动白屏）；
+// 挂件窗口（/widget）由托盘 toggle 控制显隐，不受影响
+if (
+  !import.meta.env.SSR &&
+  typeof window !== "undefined" &&
+  window.location.pathname !== "/widget"
+) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      // 动态 import 避免 Web 版打包报错：isTauri 判断在 tauri.ts 内部
+      import("./lib/tauri").then(({ showMainWindow }) => void showMainWindow());
+    });
+  });
+}
+
 // PWA：生产环境注册 Service Worker（离线缓存 + 可安装），开发环境不注册避免干扰 HMR
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {

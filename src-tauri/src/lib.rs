@@ -79,7 +79,7 @@ fn autostart_enabled(app: tauri::AppHandle) -> bool {
 
 // ── 桌面挂件（第二个透明置顶窗口）────────────────────────────
 
-/// 挂件位置记忆文件（应用数据目录，文本格式 "x,y"；零依赖，无需额外插件）
+/// 挂件位置记忆文件（应用数据目录，文本格式 "x,y,w,h"；零依赖，无需额外插件）
 fn widget_pos_path(app: &tauri::AppHandle) -> std::path::PathBuf {
     let dir = app
         .path()
@@ -89,12 +89,48 @@ fn widget_pos_path(app: &tauri::AppHandle) -> std::path::PathBuf {
     dir.join("widget-pos.txt")
 }
 
-/// 应用挂件位置：有记忆则恢复，否则定位当前显示器右上角
+/// 挂件设置文件（应用数据目录，JSON 文本；与 widget-pos.txt 分开存储）
+fn widget_settings_path(app: &tauri::AppHandle) -> std::path::PathBuf {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join("widget-settings.json")
+}
+
+/// 读取挂件设置 JSON；文件不存在/读取失败时返回错误信息（由前端决定是否用默认值）
+#[tauri::command]
+fn load_widget_settings(app: tauri::AppHandle) -> Result<String, String> {
+    std::fs::read_to_string(widget_settings_path(&app)).map_err(|e| e.to_string())
+}
+
+/// 保存挂件设置 JSON（整体覆盖写盘）
+#[tauri::command]
+fn save_widget_settings(app: tauri::AppHandle, json: String) -> Result<(), String> {
+    std::fs::write(widget_settings_path(&app), json).map_err(|e| e.to_string())
+}
+
+/// 应用挂件位置：有记忆则恢复（4 元组 x,y,w,h；2 元组 x,y 向后兼容），否则定位当前显示器右上角
 fn apply_widget_position(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("widget") {
         if let Ok(text) = std::fs::read_to_string(widget_pos_path(app)) {
-            if let Some((x, y)) = text.trim().split_once(',') {
-                if let (Ok(x), Ok(y)) = (x.parse::<i32>(), y.parse::<i32>()) {
+            let parts: Vec<&str> = text.trim().split(',').collect();
+            if parts.len() >= 4 {
+                // 4 元组：恢复尺寸（clamp 到最小 260x320，与 tauri.conf.json minWidth/minHeight 一致）再恢复位置
+                if let (Ok(x), Ok(y), Ok(width), Ok(height)) = (
+                    parts[0].parse::<i32>(),
+                    parts[1].parse::<i32>(),
+                    parts[2].parse::<u32>(),
+                    parts[3].parse::<u32>(),
+                ) {
+                    let _ = w.set_size(tauri::PhysicalSize::new(width.max(260), height.max(320)));
+                    let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+                    return;
+                }
+            } else if parts.len() >= 2 {
+                // 旧格式 "x,y"：只恢复位置，跳过 set_size
+                if let (Ok(x), Ok(y)) = (parts[0].parse::<i32>(), parts[1].parse::<i32>()) {
                     let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
                     return;
                 }
@@ -110,7 +146,8 @@ fn apply_widget_position(app: &tauri::AppHandle) {
     }
 }
 
-/// 显示/隐藏桌面月历挂件；显示时恢复记忆位置（无记忆则右上角）
+/// 显示/隐藏桌面月历挂件；显示时恢复记忆位置（无记忆则右上角），
+/// 并按已存设置应用置顶/贴桌面（stick=true → 贴桌面，否则置顶）
 #[tauri::command]
 fn toggle_widget(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("widget") {
@@ -119,7 +156,18 @@ fn toggle_widget(app: tauri::AppHandle) -> Result<(), String> {
         } else {
             apply_widget_position(&app);
             let _ = w.show();
-            let _ = w.set_always_on_top(true);
+            // 按已存设置决定置顶/贴桌面：先 show 再应用（对隐藏窗口设置 HWND_BOTTOM 无效）
+            // 读取设置失败或 stick 字段缺失/非布尔 → 按 false 处理（默认置顶，安全）
+            let stick = std::fs::read_to_string(widget_settings_path(&app))
+                .ok()
+                .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+                .and_then(|v| v.get("stick").and_then(|s| s.as_bool()))
+                .unwrap_or(false);
+            if stick {
+                let _ = set_widget_stick(true, app.clone());
+            } else {
+                let _ = w.set_always_on_top(true);
+            }
         }
     }
     Ok(())
@@ -339,12 +387,26 @@ pub fn run() {
             show_main_window,
             start_widget_resize,
             set_widget_opacity,
+            load_widget_settings,
+            save_widget_settings,
         ])
         .setup(|app| {
             #[cfg(desktop)]
             setup_tray(app.handle())?;
             // 恢复挂件记忆位置（无记忆时由 apply_widget_position 落右上角）
             apply_widget_position(app.handle());
+            // 主窗口白屏兜底：前端渲染完成后会主动 show；若前端异常导致未显示，10s 后强制显示
+            {
+                let app_handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(10));
+                    if let Some(w) = app_handle.get_webview_window("main") {
+                        if !w.is_visible().unwrap_or(true) {
+                            let _ = w.show();
+                        }
+                    }
+                });
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -353,20 +415,35 @@ pub fn run() {
                 let _ = window.hide();
                 api.prevent_close();
             }
-            // 挂件移动 → 节流记忆位置（>800ms 才写盘，避免拖动时高频 IO）
+            // 挂件移动/缩放 → 节流记忆位置+尺寸（>800ms 才写盘，避免拖动时高频 IO）
             if window.label() == "widget" {
-                if let tauri::WindowEvent::Moved(pos) = event {
-                    use std::sync::atomic::{AtomicU64, Ordering};
-                    static LAST_MS: AtomicU64 = AtomicU64::new(0);
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64;
-                    if now.saturating_sub(LAST_MS.load(Ordering::Relaxed)) > 800 {
-                        LAST_MS.store(now, Ordering::Relaxed);
-                        let app = window.app_handle();
-                        let text = format!("{},{}", pos.x, pos.y);
-                        let _ = std::fs::write(widget_pos_path(app), text);
+                use std::sync::atomic::{AtomicU64, Ordering};
+                static LAST_MS: AtomicU64 = AtomicU64::new(0);
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64;
+                if now.saturating_sub(LAST_MS.load(Ordering::Relaxed)) > 800 {
+                    LAST_MS.store(now, Ordering::Relaxed);
+                    let app = window.app_handle();
+                    match event {
+                        tauri::WindowEvent::Moved(pos) => {
+                            // Moved：写 "x,y,w,h"（w/h 用 inner_size 取；失败则跳过，避免覆盖成 "x,y,0,0"）
+                            if let Ok(size) = window.inner_size() {
+                                let text =
+                                    format!("{},{},{},{}", pos.x, pos.y, size.width, size.height);
+                                let _ = std::fs::write(widget_pos_path(app), text);
+                            }
+                        }
+                        tauri::WindowEvent::Resized(size) => {
+                            // Resized：写 "x,y,w,h"（x/y 用 outer_position 取；失败则跳过）
+                            if let Ok(pos) = window.outer_position() {
+                                let text =
+                                    format!("{},{},{},{}", pos.x, pos.y, size.width, size.height);
+                                let _ = std::fs::write(widget_pos_path(app), text);
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }

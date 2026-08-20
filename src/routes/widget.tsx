@@ -24,7 +24,7 @@ import { taskVisibleOnDate, todayStr } from "@/lib/date";
 import { expandRecurringTasks } from "@/lib/repeat";
 import { PRIORITY_BG } from "@/lib/utils";
 import { dayCellLabel, dayDetailText, getDayLunarInfo } from "@/lib/lunarInfo";
-import { isTauri, setWidgetOpacity, setWidgetStick, showMainWindow, startWidgetResize, toggleWidget } from "@/lib/tauri";
+import { isTauri, loadWidgetSettings, saveWidgetSettings, setWidgetOpacity, setWidgetStick, showMainWindow, startWidgetResize, toggleWidget } from "@/lib/tauri";
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 const SETTINGS_KEY = "planner-widget-settings";
@@ -51,16 +51,6 @@ const DEFAULT_SETTINGS: WidgetSettings = {
   stick: false,
 };
 
-function loadSettings(): WidgetSettings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
-
 function WidgetCalendar() {
   const tasks = usePlannerStore((s) => s.tasks);
   const recurringInstances = usePlannerStore((s) => s.recurringInstances);
@@ -72,10 +62,11 @@ function WidgetCalendar() {
   const [openDay, setOpenDay] = useState<string | null>(null); // 双击弹出的日格
   const [editingId, setEditingId] = useState<string | null>(null); // 行内编辑任务
   const [editValue, setEditValue] = useState("");
-  const [settings, setSettings] = useState<WidgetSettings>(loadSettings);
+  const [settings, setSettings] = useState<WidgetSettings>(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
   const [gridH, setGridH] = useState(300); // 日期网格容器实测高度（px），窗口拉伸时更新
+  const hydratedRef = useRef(false); // 设置异步加载完成前不写盘，避免 DEFAULT 覆盖真实值
 
   // 挂件窗口背景透明 + 作用域透明 reset：内容层背景恒透明，只有 data-surface 弹窗才有底，
   // 杜绝任何 Tailwind 主题背景 token（bg-background / bg-muted 等）渗入透明层
@@ -97,10 +88,53 @@ function WidgetCalendar() {
     };
   }, []);
 
-  // 设置持久化 + 贴桌面同步（桌面端）
+  // 设置异步加载：从 Rust 文件读取（非 Tauri 时回退 localStorage），合并默认值；加载完成前不写盘
   useEffect(() => {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    if (isTauri) void setWidgetStick(settings.stick);
+    let cancelled = false;
+    (async () => {
+      let merged: WidgetSettings = DEFAULT_SETTINGS;
+      if (isTauri) {
+        const raw = await loadWidgetSettings();
+        if (raw) {
+          try { merged = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }; } catch { /* 损坏则用默认 */ }
+        } else {
+          // 升级迁移：Rust 文件不存在时回退旧 localStorage，成功后写回文件并清除本地（避免下次重复迁移）
+          try {
+            const legacy = localStorage.getItem(SETTINGS_KEY);
+            if (legacy) {
+              merged = { ...DEFAULT_SETTINGS, ...JSON.parse(legacy) };
+              void saveWidgetSettings(JSON.stringify(merged));
+              localStorage.removeItem(SETTINGS_KEY);
+            }
+          } catch { /* 无旧值或解析失败则用默认 */ }
+        }
+      } else {
+        try {
+          const raw = localStorage.getItem(SETTINGS_KEY);
+          if (raw) merged = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+        } catch { /* ignore */ }
+      }
+      if (cancelled) return;
+      setSettings(merged);
+      hydratedRef.current = true;
+      if (isTauri) void setWidgetStick(merged.stick); // 重启后恢复贴桌面状态
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // 设置变更 → 150ms 防抖保存（Rust 文件 / localStorage 兜底）；hydration 前不写，避免 DEFAULT 覆盖真实值
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    const t = setTimeout(() => {
+      const json = JSON.stringify(settings);
+      if (isTauri) {
+        void saveWidgetSettings(json);
+        void setWidgetStick(settings.stick); // 会话内切换「贴桌面」即时生效（等价原 L103 行为）
+      } else {
+        localStorage.setItem(SETTINGS_KEY, json);
+      }
+    }, 150);
+    return () => clearTimeout(t);
   }, [settings]);
 
   // 透明度下沉到 OS 窗口：滑块调窗口透明度；弹窗（设置/详情）打开时拉满 1 保证清晰，关闭恢复滑块值
