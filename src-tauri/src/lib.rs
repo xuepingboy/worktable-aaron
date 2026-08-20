@@ -195,14 +195,38 @@ fn start_widget_resize(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 设置挂件窗口整体透明度（0.0~1.0）。透明度由 OS 合成器处理，与任何 DOM 样式解耦——
-/// 这是把「透明度」从 CSS 下沉到 OS 窗口、彻底去除白边/白底的关键（方案 A）。
+/// 设置挂件窗口整体透明度（0.0~1.0）。
+/// 注：tauri 2.11.x（当前最新）在 Rust/JS 两侧均无运行时透明度 API（无 set_opacity /
+/// window-opacity feature，docs.rs 与 @tauri-apps/api 源码已确认），
+/// 故用 Windows 原生 SetLayeredWindowAttributes 实现窗口级透明度（方案 A 的等价实现）。
+#[cfg(target_os = "windows")]
 #[tauri::command]
 fn set_widget_opacity(value: f64, app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(w) = app.get_window("widget") {
-        let v = value.clamp(0.0, 1.0);
-        w.set_opacity(v).map_err(|e| e.to_string())?;
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, GWL_EXSTYLE, LWA_ALPHA,
+        WS_EX_LAYERED,
+    };
+    if let Some(w) = app.get_webview_window("widget") {
+        let Ok(handle) = w.window_handle() else { return Ok(()); };
+        let RawWindowHandle::Win32(h) = handle.as_raw() else { return Ok(()); };
+        let hwnd = h.hwnd.get() as *mut core::ffi::c_void;
+        unsafe {
+            // 分层窗口（layered）是 SetLayeredWindowAttributes 生效的前提
+            let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_LAYERED as isize);
+            // 透明度：1.0 → 255（完全不透明），0.0 → 0（完全透明）
+            let alpha = (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+            SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+        }
     }
+    Ok(())
+}
+
+/// 非 Windows：透明度无对应原生 API，静默成功（前端开关仍可显示）
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn set_widget_opacity(_value: f64, _app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 

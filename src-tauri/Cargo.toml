@@ -16,7 +16,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # unstable：Manager::get_window 被 #[cfg(feature = "unstable")] 门控，
 # 挂件 resize 需要 Window 句柄（start_resize_dragging 仅在 Window 上），故开启
-tauri = { version = "2", features = ["tray-icon", "unstable", "window-opacity"] }
+tauri = { version = "2", features = ["tray-icon", "unstable"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
