@@ -2,6 +2,7 @@
 import type { Goal, Task } from "../types";
 import { addDays, addMonths, endOfDay, format, parseISO, startOfWeek } from "date-fns";
 import { DATE_FMT } from "./date";
+import { generateId } from "./utils";
 
 function d(date: Date): string {
   return format(date, DATE_FMT);
@@ -13,7 +14,7 @@ export function buildSampleData(): { tasks: Task[]; goals: Goal[] } {
   const today = new Date();
   const monday = startOfWeek(today, { weekStartsOn: 1 });
   const mk = (t: Partial<Task> & { title: string; date: string }): Task => ({
-    id: crypto.randomUUID(),
+    id: generateId(),
     title: t.title,
     date: t.date,
     time: t.time,
@@ -46,8 +47,8 @@ export function buildSampleData(): { tasks: Task[]; goals: Goal[] } {
       tags: ["工作", "会议"],
       description: "与团队同步本周各模块进展，确认风险项与资源缺口。",
       subtasks: [
-        { id: crypto.randomUUID(), title: "整理上周数据", done: true },
-        { id: crypto.randomUUID(), title: "列出阻塞项", done: true },
+        { id: generateId(), title: "整理上周数据", done: true },
+        { id: generateId(), title: "列出阻塞项", done: true },
       ],
     }),
     mk({
@@ -61,9 +62,9 @@ export function buildSampleData(): { tasks: Task[]; goals: Goal[] } {
       description: "汇总 Q2 目标达成情况，输出复盘结论与下季度建议。",
       reminderOffset: 30,
       subtasks: [
-        { id: crypto.randomUUID(), title: "收集数据", done: true },
-        { id: crypto.randomUUID(), title: "撰写初稿", done: false },
-        { id: crypto.randomUUID(), title: "评审修订", done: false },
+        { id: generateId(), title: "收集数据", done: true },
+        { id: generateId(), title: "撰写初稿", done: false },
+        { id: generateId(), title: "评审修订", done: false },
       ],
     }),
     mk({
@@ -215,7 +216,7 @@ export function buildSampleData(): { tasks: Task[]; goals: Goal[] } {
 
   const goals: Goal[] = [
     {
-      id: crypto.randomUUID(),
+      id: generateId(),
       title: "完成季度复盘报告并提交",
       type: "week",
       start: d(monday),
@@ -223,14 +224,14 @@ export function buildSampleData(): { tasks: Task[]; goals: Goal[] } {
       isFocus: true,
     },
     {
-      id: crypto.randomUUID(),
+      id: generateId(),
       title: "坚持每周 3 次健身",
       type: "week",
       start: d(monday),
       end: d(addDays(monday, 6)),
     },
     {
-      id: crypto.randomUUID(),
+      id: generateId(),
       title: "推进产品原型评审落地",
       type: "month",
       start: d(today),
@@ -238,7 +239,7 @@ export function buildSampleData(): { tasks: Task[]; goals: Goal[] } {
       isFocus: true,
     },
     {
-      id: crypto.randomUUID(),
+      id: generateId(),
       title: "读完 2 本专业书籍",
       type: "month",
       start: d(today),

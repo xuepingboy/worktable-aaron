@@ -6,6 +6,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** 生成唯一 ID：优先 crypto.randomUUID，非安全上下文（HTTP）时降级为时间戳+随机串 */
+export function generateId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /** 优先级文字颜色（统一各视图展示） */
 export const PRIORITY_TEXT: Record<Priority, string> = {
   high: "text-red-500",

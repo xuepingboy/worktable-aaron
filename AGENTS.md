@@ -6,6 +6,7 @@
 - `xlsx` (SheetJS)：任务明细导出 Excel
 - `date-fns`：日期周期计算（本地时区安全）
 - `vitest`：单元测试（`pnpm test`，2026-08-18 引入；测试文件 `src/**/*.test.ts`，配置 `vitest.config.ts` 对齐 @ 别名）
+- `husky` + `lint-staged`：git pre-commit 钩子，对暂存的 `*.{ts,tsx}` 执行 `tsc --noEmit` 类型检查（2026-08-19 引入）；`build` 脚本已改为 `tsc --noEmit && vite build` 严格验证
 
 ## Architecture
 - 数据模型：`src/types.ts`（Task/Goal/SubTask/Attachment），含 `overrideDate`、`lastNotifiedAt`、`endDate`（截止日期）、`completedAt`（完成时间戳）字段；`SubTask` 含 `completedAt`（子任务完成时间戳）
@@ -17,11 +18,13 @@
 - 自然语言快速添加：`src/lib/quickAdd.ts` 的 `parseQuickAdd(input, baseDate)` 解析日期/时间/优先级/标签，今日视图顶部快速添加框接入
 - 智能清单筛选：`FilterState.dateRange`（all/today/week/month），明细视图筛选栏 Select 接入，`filterTasks` 支持日期范围过滤
 - 明细视图（`_layout.tasks.tsx`）：重复任务**分组折叠**——普通任务逐行、重复任务折叠为一行（显示规则摘要 + 展开箭头），点击展开显示未来 90 天实例（`expandRecurringTasks([tpl], today, today+90)`）；禁止用宽区间（如 1900-2100）展开全部实例，否则重复任务平铺成几十上百行
+- 周/月视图按天分组：`_layout.week.tsx` 的 `tasksByDayMap`、`_layout.month.tsx` 的 `tasksByDateMap` 用 `useMemo` 预计算 `Map<date, Task[]>`，避免 7 列/月历格子渲染时对 `expanded` 重复遍历；周/月统计（`weekTasks`/`monthTasks`）同样 memo 化
 - 提醒引擎：`src/lib/reminder.ts`，每 60s 扫描 + `lastNotifiedAt` 去重；Tauri 下 `notify` 走 `src/lib/tauri.ts` 的 `sendNativeNotification`（原生通知），Web 走浏览器 Notification
 - Tauri 桥（2026-08-19）：`src/lib/tauri.ts` 是唯一入口——`isTauri` 检测 + `invoke`（走 `window.__TAURI_INTERNALS__`，**禁止引入 @tauri-apps/api**）；新增 Rust 命令（`src-tauri/src/lib.rs`）后必须在此同步封装；桌面端附件链接模式：`Attachment.mode==="link"` 只存 `path`（size=-1），打开统一走 `src/lib/attachment.ts` 的 `openAttachment/openAttachments`（链接→系统打开，blob→IndexedDB 下载）
 - 路由：TanStack Router，`_layout` 共享壳 + today/week/month/tasks 四视图
 - 全局任务表单：plannerStore 持有 `taskFormOpen/taskFormDate/openTaskForm/closeTaskForm`，各页面接入
 - 优先级样式统一：`src/lib/utils.ts` 导出 `PRIORITY_TEXT`（文字色）/`PRIORITY_DOT`（圆点色），各视图（TaskCard/SidePanel/tasks/month）一律引用，禁止本地重复定义
+- ID 生成：`src/lib/utils.ts` 的 `generateId()` 统一生成唯一 ID（优先 `crypto.randomUUID`，非安全上下文降级时间戳+随机串），新增任务/目标/子任务/附件一律经此函数，禁止直接调 `crypto.randomUUID`
 - 主题持久化：`AppShell.tsx` 用 `localStorage` key `planner-theme`（"light"/"dark"），初始化读取 + 切换写入
 - 全局快捷键：`AppShell.tsx` 监听 keydown——`N` 新增任务、`1-4` 切换今日/周/月/明细视图（INPUT/TEXTAREA 聚焦时忽略）
 
@@ -34,3 +37,4 @@
 - 周视图布局：采用参考图「顶部统计 + 本周目标/重点事项 + 纵向每日任务列表」结构（`_layout.week.tsx`），每行宽度足够，任务名用 `break-words` 完整显示；禁止 7 列并排看板（`grid-cols-7` 会让列过窄、任务名被迫 6 字换行或截断）
 - 每月同日展开（`repeat.expandDates` 无 config 分支）：保持 base 目标日，超限（31 号遇 2 月）取月末，避免 addMonths 漂移（2026-08-18 修复，vitest 覆盖）
 - 改动核心 lib（date/repeat/quickAdd/export）后必须 `pnpm test` 回归；`vite build` 不做类型检查，另跑 `pnpm run typecheck`
+- Tauri Windows 打包（2026-08-19）：`tauri.conf.json` 的 `bundle.targets` 只保留 `nsis`，`icon` 只列 `icon.ico`+png；**禁止包含 macOS 的 `dmg` target 和 `icon.icns`**（Windows 上无法生成 dmg、无 icns 文件会导致打包失败）

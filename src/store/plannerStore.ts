@@ -22,6 +22,7 @@ import {
   toDateStr,
 } from "../lib/date";
 import { endOfMonth } from "date-fns";
+import { generateId } from "../lib/utils";
 
 interface PlannerState {
   tasks: Task[];
@@ -101,7 +102,7 @@ export const usePlannerStore = create<PlannerState>((set) => ({
     const now = Date.now();
     const newTask: Task = {
       ...task,
-      id: crypto.randomUUID(),
+      id: generateId(),
       deadline: task.deadline ?? defaultDeadline(task.date, task.endDate),
       createdAt: now,
       updatedAt: now,
@@ -185,7 +186,7 @@ export const usePlannerStore = create<PlannerState>((set) => ({
   },
 
   addGoal: (goal) => {
-    const newGoal: Goal = { ...goal, id: crypto.randomUUID() };
+    const newGoal: Goal = { ...goal, id: generateId() };
     set((s) => {
       const goals = [...s.goals, newGoal];
       scheduleSaveGoals(goals);
@@ -230,9 +231,10 @@ export const usePlannerStore = create<PlannerState>((set) => ({
   },
 
   clearAll: () => {
-    set({ tasks: [], goals: [], recurringInstances: {} });
+    set({ tasks: [], goals: [], memos: {}, recurringInstances: {} });
     saveTasks([]);
     saveGoals([]);
+    saveMemos({});
     saveRecurringInstances({});
   },
 }));

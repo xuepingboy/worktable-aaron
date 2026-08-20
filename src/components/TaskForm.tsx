@@ -22,6 +22,7 @@ import { todayStr } from "@/lib/date";
 import { saveAttachmentBlob } from "@/lib/storage";
 import { isTauri, pickAttachmentPaths } from "@/lib/tauri";
 import { openAttachment } from "@/lib/attachment";
+import { generateId } from "@/lib/utils";
 import { Paperclip } from "lucide-react";
 
 interface TaskFormProps {
@@ -164,7 +165,7 @@ export function TaskForm({ open, onOpenChange, editing, defaultDate }: TaskFormP
   };
 
   const addSubtaskRow = () => {
-    setSubtasks((s) => [...s, { ...EMPTY_SUBTASK, id: crypto.randomUUID() }]);
+    setSubtasks((s) => [...s, { ...EMPTY_SUBTASK, id: generateId() }]);
   };
 
   /** 桌面端（Tauri）：原生对话框选本地文件 → 链接模式（只存路径，不复制） */
@@ -174,7 +175,7 @@ export function TaskForm({ open, onOpenChange, editing, defaultDate }: TaskFormP
       if (!paths.length) return; // 用户取消
       const items: Attachment[] = paths.map((p) => {
         const name = p.split(/[\\/]/).filter(Boolean).pop() ?? p;
-        return { id: crypto.randomUUID(), name, type: "", size: -1, mode: "link", path: p };
+        return { id: generateId(), name, type: "", size: -1, mode: "link", path: p };
       });
       setAttachments((prev) => [...prev, ...items]);
     } catch {
@@ -201,7 +202,7 @@ export function TaskForm({ open, onOpenChange, editing, defaultDate }: TaskFormP
           toast.error(`「${file.name}」超过 20MB 限制`);
           return null;
         }
-        const id = crypto.randomUUID();
+        const id = generateId();
         // 持久化附件 Blob 到 IndexedDB；失败时提示用户并跳过，避免出现无法读取的假附件
         const ok = await saveAttachmentBlob(id, file);
         if (!ok) {

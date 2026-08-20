@@ -1,85 +1,56 @@
-# 工作计划管理工作台 - 云端构建桌面安装包（无需本地 Rust）
-# 触发方式：推送 v* 标签（如 v1.1.0）或手动运行 workflow_dispatch
-# 产物：GitHub draft Release 附件（Windows nsis / macOS dmg）
-#
-# 关键设计：
-# 1) create-release 单平台先建好 draft release（消除多平台并行自建 release 的 409 竞态）；
-# 2) build 双平台并行只负责「构建 + 上传资产」，不再触发任何 release 创建逻辑；
-#    上传改用 softprops/action-gh-release（按 tag 找到已建 draft 并追加资产），
-#    比 tauri-action 的 releaseId 模式更可控、报错更易定位。
-name: 构建桌面版
+name: Release Tauri Desktop
 
 on:
   push:
     tags:
-      - "v*"
-  workflow_dispatch: {}
-
-permissions:
-  contents: write
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
-  # 单独一个平台预建 draft release，供构建 job 复用（按 tag 找到并追加资产）
-  create-release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - name: 创建 draft release
-        uses: softprops/action-gh-release@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ github.ref_name }}
-          name: 工作计划管理工作台 ${{ github.ref_name }}
-          draft: true
-          prerelease: false
-          generate_release_notes: false
+  release:
+    permissions:
+      contents: write
+    runs-on: windows-latest
 
-  build:
-    needs: create-release
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - windows-latest
-          - macos-latest
-    runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
-      - name: 安装 pnpm
+      - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
-      - name: 安装 Node
-        uses: actions/setup-node@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 24
-          cache: pnpm
+          node-version: 20
+          cache: 'pnpm'
 
-      - name: 安装 Rust
+      - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
 
-      - name: 安装前端依赖（自动同步 lockfile）
-        run: pnpm install
-
-      - name: 生成全套应用图标（含 icns/ico）
-        run: pnpm tauri icon assets/icons/工作计划管理工作台.png
-
-      - name: 构建安装包（tauri build，自动先执行 pnpm build）
-        run: pnpm tauri build
-
-      - name: 列出打包产物（调试：确认 upload 前的实际路径）
-        shell: bash
-        run: ls -R src-tauri/target/release/bundle || true
-
-      - name: 上传资产到已建 draft release
-        uses: softprops/action-gh-release@v2
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ github.ref_name }}
-          fail_on_unmatched_files: false
-          files: |
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/bundle/msi/*.msi
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Cargo check (verify Rust code)
+        working-directory: ./src-tauri
+        run: cargo check
+
+      - name: Build frontend (verify TypeScript)
+        run: pnpm build
+
+      - name: Build and release Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: '工作计划管理工作台 v__VERSION__'
+          releaseBody: '自动构建发布：工作计划管理工作台桌面端（Windows）'
+          releaseDraft: true
+          prerelease: false

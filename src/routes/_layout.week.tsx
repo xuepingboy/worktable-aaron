@@ -58,11 +58,21 @@ function WeekPage() {
     [tasks, weekStartStr, weekEndStr, recurringInstances]
   );
 
-  const tasksByDay = (day: string) =>
-    sortTasksForView(expanded.filter((t) => taskVisibleOnDate(t, day)), day);
+  // 按天预分组（Map 缓存，避免 7 列渲染时重复遍历 expanded）
+  const tasksByDayMap = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    for (const day of days) {
+      map.set(day, sortTasksForView(expanded.filter((t) => taskVisibleOnDate(t, day)), day));
+    }
+    return map;
+  }, [expanded, days]);
+  const tasksByDay = (day: string) => tasksByDayMap.get(day) ?? [];
 
-  // 周统计
-  const weekTasks = expanded.filter((t) => days.some((day) => taskVisibleOnDate(t, day)));
+  // 周统计（memo 化，避免每次渲染重复遍历）
+  const weekTasks = useMemo(
+    () => expanded.filter((t) => days.some((day) => taskVisibleOnDate(t, day))),
+    [expanded, days]
+  );
   const weekTotal = weekTasks.length;
   const weekDone = weekTasks.filter((t) => t.status === "done").length;
   const weekRate = weekTotal ? Math.round((weekDone / weekTotal) * 100) : 0;

@@ -3,6 +3,7 @@
 import { addDays, addMonths, addWeeks, addYears, getDay, getMonth, getDate, isAfter, isBefore } from "date-fns";
 import type { RecurringInstanceState, RepeatConfig, RepeatRule, Task } from "../types";
 import { parseDate, toDateStr } from "./date";
+import { generateId } from "./utils";
 
 /** 判断某日期是否命中重复规则（含旧数据兼容：无 config 时按旧逻辑） */
 export function matchesRule(date: Date, rule: RepeatRule, config?: RepeatConfig): boolean {
@@ -170,7 +171,7 @@ export function resolveEditTarget(task: Task, allTasks: Task[]): Task {
 export function createOverrideTask(template: Task, dateStr: string): Task {
   return {
     ...template,
-    id: crypto.randomUUID(),
+    id: generateId(),
     date: dateStr,
     isRecurringOverride: true,
     overrideDate: dateStr,

@@ -61,12 +61,20 @@ function MonthPage() {
     [tasks, monthStart, monthEnd, recurringInstances]
   );
 
-  const tasksByDate = (date: string) =>
-    expanded.filter((t) => taskVisibleOnDate(t, date));
+  // 按日期预分组（Map 缓存，避免月历格子渲染时重复遍历 expanded）
+  const tasksByDateMap = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    for (const dateStr of monthDaysArr) {
+      map.set(dateStr, expanded.filter((t) => taskVisibleOnDate(t, dateStr)));
+    }
+    return map;
+  }, [expanded, monthDaysArr]);
+  const tasksByDate = (date: string) => tasksByDateMap.get(date) ?? [];
 
-  const selectedTasks = tasksByDate(selectedDate).sort((a, b) => a.order - b.order);
-  const monthTasks = expanded.filter((t) =>
-    monthDaysArr.some((d) => taskVisibleOnDate(t, d))
+  const selectedTasks = (tasksByDateMap.get(selectedDate) ?? []).sort((a, b) => a.order - b.order);
+  const monthTasks = useMemo(
+    () => expanded.filter((t) => monthDaysArr.some((d) => taskVisibleOnDate(t, d))),
+    [expanded, monthDaysArr]
   );
   const monthDone = monthTasks.filter((t) => t.status === "done").length;
   const monthOverdue = monthTasks.filter((t) => isOverdue(t)).length;

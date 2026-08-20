@@ -14,14 +14,18 @@ export interface ExportOptions {
   end?: string; // YYYY-MM-DD（custom 时必填）
 }
 
-/** 按时间范围过滤任务（含起止，闭区间） */
+/** 按时间范围过滤任务（含起止，闭区间；范围任务按 [date, endDate] 与区间求交集） */
 export function filterTasksByRange(tasks: Task[], opts: ExportOptions): Task[] {
   if (opts.range === "all") return tasks;
   // 非 all 范围：start/end 缺一即视为不过滤（custom 时调用方保证传入）
   const start = opts.start;
   const end = opts.end;
   if (!start || !end) return tasks;
-  return tasks.filter((t) => t.date >= start && t.date <= end);
+  return tasks.filter((t) => {
+    const taskStart = t.date;
+    const taskEnd = t.endDate ?? t.date;
+    return taskStart <= end && taskEnd >= start;
+  });
 }
 
 /** 生成 AI 素材 Markdown（月度总结用，含每日笔记） */

@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 3017 --host 0.0.0.0 --strictPort",
-    "build": "vite build",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 3017 --host 0.0.0.0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepare": "husky"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -61,12 +62,19 @@
     "zod": "^3.24.2",
     "zustand": "^5.0.3"
   },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "tsc --noEmit"
+    ]
+  },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
     "typescript": "^5.8.3",
     "vite": "^7.3.1",
     "vitest": "^4.1.10"

@@ -101,20 +101,22 @@ function TasksPage() {
   };
 
   const handleBatchDone = () => {
+    const count = selected.size;
     selected.forEach((id) => {
       if (id.includes("::")) toggleRecurringInstance(id);
       else updateTask(id, { status: "done" });
     });
     setSelected(new Set());
-    toast.success(`已完成 ${selected.size} 项`);
+    toast.success(`已完成 ${count} 项`);
   };
 
   const handleBatchDelete = () => {
-    if (!window.confirm(`确定删除选中的 ${selected.size} 项任务？此操作不可恢复。`)) return;
+    const count = selected.size;
+    if (!window.confirm(`确定删除选中的 ${count} 项任务？此操作不可恢复。`)) return;
     const realIds = Array.from(selected).filter((id) => !id.includes("::"));
     if (realIds.length > 0) deleteTasks(realIds);
     setSelected(new Set());
-    toast.success(`已删除 ${selected.size} 项`);
+    toast.success(`已删除 ${count} 项`);
   };
 
   const toggleGroup = (templateId: string) => {

@@ -37,7 +37,12 @@ function readArray<T>(key: string): T[] {
 }
 
 function writeArray<T>(key: string, value: T[]): void {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    // 隐私模式/配额超限等场景：记录告警，避免静默丢数据
+    console.warn(`本地存储写入失败（${key}）`, err);
+  }
 }
 
 /** 校验并归一化单条任务：核心字段缺失/类型错误视为脏数据返回 null；可选字段缺失补默认值（兼容旧数据） */
@@ -141,6 +146,7 @@ export async function clearAllStorage(): Promise<void> {
   localStorage.removeItem(META_KEY);
   localStorage.removeItem(TASKS_KEY);
   localStorage.removeItem(GOALS_KEY);
+  localStorage.removeItem(MEMOS_KEY);
   localStorage.removeItem(RECURRING_KEY);
   // 清空 IndexedDB 附件
   const keys = await get<string[]>("planner.attachmentKeys");
