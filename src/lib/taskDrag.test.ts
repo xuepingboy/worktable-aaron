@@ -30,6 +30,9 @@ describe("isTaskDraggable", () => {
   it("重复模板不可拖拽", () => {
     expect(isTaskDraggable(mkTask({ id: "b", repeatRule: "weekly" }))).toBe(false);
   });
+  it("repeatRule 缺失（旧数据/快速添加）按 none 放行", () => {
+    expect(isTaskDraggable(mkTask({ id: "e", repeatRule: undefined as never }))).toBe(true);
+  });
 });
 
 describe("buildDropPatch", () => {

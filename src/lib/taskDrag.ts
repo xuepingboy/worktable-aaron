@@ -2,9 +2,10 @@
 import type { Task } from "../types";
 import { isVirtualInstance } from "./repeat";
 
-/** 是否允许拖拽：非虚拟实例、非重复模板的普通任务（避免破坏重复规则/虚拟实例） */
+/** 是否允许拖拽：非虚拟实例、非重复模板的普通任务（避免破坏重复规则/虚拟实例）。
+ * 注意：旧数据/快速添加的任务 repeatRule 可能为 undefined，按 "none" 兜底放行。 */
 export function isTaskDraggable(t: Task): boolean {
-  return !isVirtualInstance(t) && t.repeatRule === "none";
+  return !isVirtualInstance(t) && (t.repeatRule ?? "none") === "none";
 }
 
 /**

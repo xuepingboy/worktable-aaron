@@ -103,6 +103,9 @@ export const usePlannerStore = create<PlannerState>((set) => ({
     const newTask: Task = {
       ...task,
       id: generateId(),
+      // 兜底 repeatRule（旧数据/快速添加可能缺失；undefined 会导致 isTaskDraggable 误判不可拖）
+      repeatRule: task.repeatRule ?? "none",
+      repeatConfig: task.repeatRule === "none" ? undefined : task.repeatConfig,
       deadline: task.deadline ?? defaultDeadline(task.date, task.endDate),
       createdAt: now,
       updatedAt: now,

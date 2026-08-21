@@ -1,6 +1,6 @@
 // 月度排期：月历 + 选中日任务列表 + 月统计
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -48,6 +48,8 @@ function MonthPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   // 拖拽悬停的目标日期（用于格子高亮）
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  // 拖拽结束 120ms 内吞掉补发的 click，避免误开编辑框
+  const justDraggedRef = useRef(false);
 
   const today = todayStr();
   const grid = monthGrid(cursor);
@@ -160,9 +162,17 @@ function MonthPage() {
               const isToday = dateStr === today;
               const isSelected = dateStr === selectedDate;
               return (
-                <button
+                <div
                   key={dateStr}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => openDayDetail(dateStr)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.stopPropagation();
+                      openDayDetail(dateStr);
+                    }
+                  }}
                   onDragOver={handleDragOver(dateStr)}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop(dateStr)}
@@ -189,7 +199,7 @@ function MonthPage() {
                     {dayTasks.slice(0, 4).map((t) => {
                       const draggable = isTaskDraggable(t);
                       return (
-                      <span
+                      <div
                         key={t.id}
                         role="button"
                         tabIndex={0}
@@ -197,13 +207,20 @@ function MonthPage() {
                         onDragStart={
                           draggable
                             ? (e) => {
+                                justDraggedRef.current = true;
                                 e.dataTransfer.setData("text/plain", t.id);
                                 e.dataTransfer.effectAllowed = "move";
                               }
                             : undefined
                         }
+                        onDragEnd={() => {
+                          setTimeout(() => {
+                            justDraggedRef.current = false;
+                          }, 120);
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (justDraggedRef.current) return;
                           openEdit(t);
                         }}
                         onKeyDown={(e) => {
@@ -218,11 +235,11 @@ function MonthPage() {
                         title={t.title}
                       >
                         {t.title}
-                      </span>
+                      </div>
                       );
                     })}
                   </div>
-                </button>
+                </div>
               );
             })}
         </div>
