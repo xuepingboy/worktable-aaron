@@ -176,3 +176,22 @@
 - **门禁**：tsc 0 / vite build 2829 modules / vitest 7 文件 82 用例全过 / emoji 零匹配 / QA 独立验证 pass（无 blocking；A1/A2 高优 advisory 已当场修复并复验）。
 - **QA 遗留 advisory（记入 docs/decisions/OPEN-DECISIONS.md，不阻塞）**：A3 尺寸只保底不封顶、A4 节流尾事件丢失、A5 10s 兜底与主动关闭冲突、A6 防抖丢尾、A7 动态 import chunk 警告、A8 写盘非原子、架构师 A2 环境级 AppData 清空来源待排查。
 - **⚠️ 用户侧**：v1.1.6 draft 构建好后 Publish；v1.1.3/v1.1.4 空 draft 记得删；v1.1.5 若已发布则资产与 v1.1.6 并存（v1.1.6 才是本轮修复版）。
+
+## 2026-08-21 更新：月/周视图任务拖拽改期失效修复（commit d89c211，tag v1.1.7）
+- **问题**：用户反馈月视图/周视图普通任务无法拖拽改日期——无拖影、目标格不高亮、松手无反应。
+- **根因（双因叠加）**：① `isTaskDraggable` 用裸 `t.repeatRule === "none"`，旧数据/快速添加任务 `repeatRule` 为 `undefined` → 判定不可拖；② 月视图日格是 `<button>`（拦截 `dragstart`）+ 任务块是 `<span>`（inline 元素不可 `draggable`），HTML5 DnD 结构非法。
+- **改动（5 文件 +49/−10）**：
+  - `src/lib/taskDrag.ts`：`isTaskDraggable` 改 `(t.repeatRule ?? "none") === "none"` 兜底放行。
+  - `src/store/plannerStore.ts`：`addTask` 源头补 `repeatRule: task.repeatRule ?? "none"` + `repeatConfig` 兜底。
+  - `src/routes/_layout.month.tsx`：日格 `<button>` → `<div role="button" tabIndex={0}>`（补 `onKeyDown` Enter/空格）；任务 `<span>` → `<div draggable>`；加 `justDraggedRef` 拖拽后 120ms 吞 click 防误开编辑框。
+  - `src/components/WeekTaskBlock.tsx`：加 `justDraggedRef`（`useRef`）抑制拖拽后补发 click 误触 `onEdit`。
+  - `src/lib/taskDrag.test.ts`：+1 回归测试（repeatRule undefined 放行）。
+- **门禁**：tsc 0 / vitest 7 文件 83 用例全过 / vite build 通过；`src-tauri/tauri.conf.json` 版本 1.1.6→1.1.7。已 `git push origin main --tags`（49117f6..d89c211，tag v1.1.7）。
+- **⚠️ 用户侧**：v1.1.7 draft 构建好后到 Releases 页 Publish；v1.1.3/v1.1.4 空 draft 仍待删；v1.1.6 若尚未 Publish 请先 Publish 再发 v1.1.7。
+
+## 2026-08-21 更新：桌面版（Tauri/WebView2）拖拽禁止符号根因与修复（commit f5093c2，tag v1.1.8）
+- **根因（关键！非 JS 代码问题）**：Tauri v2 Windows 的 `app.windows[].dragDropEnabled` 默认 `true`，会在 WebView2 上安装原生 OLE 拖放处理器，**在 WebView 看到事件前吃掉 dragover/drop/dragleave**。现象：`dragstart` 能触发（拖拽开始、光标变化）但 `dragover`/`drop` 不触发 → 浏览器无法 `preventDefault` → 全程显示禁止符号 🚫。macOS/Linux 不受影响（GTK/AppKit 允许共存），仅 Windows 必现。参考 tauri-apps/tauri#15138。
+- **修复**：`src-tauri/tauri.conf.json` 的 main + widget 窗口均加 `"dragDropEnabled": false`，关闭 Tauri 的 OLE 拦截，HTML5 DnD 恢复正常。本应用附件走原生对话框（`pickAttachmentPaths`）、不依赖 OS 文件拖入 webview，故无功能损失。
+- **版本**：tauri.conf.json 1.1.7→1.1.8；已 `git push origin main --tags`（d89c211..f5093c2，tag v1.1.8）。此修复为 Rust/配置层，**必须重新出包（CI 构建 Windows nsis）后安装才生效**，纯前端 `pnpm dev`/绿色版本就正常。
+- **教训（写入 AGENTS.md 候选）**：Tauri 桌面端凡用 HTML5 拖放（含 dnd 库），Windows 必须把 `dragDropEnabled` 设 false，否则事件被拦截、光标 🚫；此坑与前端代码正确性无关，排查时优先检查 tauri.conf 而非 DnD 逻辑。
+- **⚠️ 用户侧**：v1.1.8 draft 构建好后到 Releases 页 Publish 安装；v1.1.3/v1.1.4 空 draft 仍待删。

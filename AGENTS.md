@@ -33,6 +33,7 @@
 
 ## Lessons
 - 周看板拖拽用浏览器原生 HTML5 拖放 API，四件套（draggable/onDragStart/onDragOver+preventDefault/onDrop）缺一不可，禁止与 pointer 方案混用
+- **Tauri 桌面端拖拽必坑（Windows）**：`tauri.conf.json` 的 `app.windows[].dragDropEnabled` 默认 `true` 会在 WebView2 安装原生 OLE 拖放处理器，**吃掉 dragover/drop/dragleave（仅 dragstart 触发）** → 桌面版任务拖拽全程显示禁止符号 🚫，与前端 DnD 代码正确性无关。凡桌面端用 HTML5 拖放（含 dnd 库），Windows 必须设 `"dragDropEnabled": false`（main + widget 窗口）。macOS/Linux 不受影响。代价：OS 文件拖入 webview 不再经 Tauri 事件（本应用附件走原生对话框 `pickAttachmentPaths`，无影响）。参考 tauri-apps/tauri#15138。
 - 日期比较必须用 date-fns 本地时区安全 API，避免 `new Date("YYYY-MM-DD")` 的 UTC 偏移问题
 - 周视图布局：采用参考图「顶部统计 + 本周目标/重点事项 + 纵向每日任务列表」结构（`_layout.week.tsx`），每行宽度足够，任务名用 `break-words` 完整显示；禁止 7 列并排看板（`grid-cols-7` 会让列过窄、任务名被迫 6 字换行或截断）
 - 每月同日展开（`repeat.expandDates` 无 config 分支）：保持 base 目标日，超限（31 号遇 2 月）取月末，避免 addMonths 漂移（2026-08-18 修复，vitest 覆盖）
